@@ -13,13 +13,13 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.645.0",
+    "@aws-sdk/s3-request-presigner": "^3.929.0",
     "axios": "^1.7.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.19.0",
-    "mongoose": "^8.2.0",
-    "@aws-sdk/client-s3": "^3.645.0",
-    "@aws-sdk/s3-request-presigner": "^3.645.0"
+    "mongoose": "^8.2.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"

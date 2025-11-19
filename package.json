@@ -1,25 +1,33 @@
 {
-  "name": "back",
+  "name": "deepfake-detection-api",
   "version": "1.0.0",
-  "description": "",
+  "description": "API para detección de deepfakes usando Facia AI",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "vercel-build": "echo 'Build complete'"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.645.0",
+    "@aws-sdk/s3-presigned-post": "^3.933.0",
+    "@aws-sdk/s3-request-presigner": "^3.929.0",
     "axios": "^1.7.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.19.0",
+    "form-data": "^4.0.5",
     "mongoose": "^8.2.0",
-    "@aws-sdk/client-s3": "^3.645.0",
-    "@aws-sdk/s3-request-presigner": "^3.645.0"
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "yamljs": "^0.3.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"

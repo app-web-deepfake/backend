@@ -30,7 +30,7 @@ info:
     name: MIT
 
 servers:
-  - url: https://backend-iota-ten-94.vercel.app
+  - url: https://backend-0ecl.onrender.com
     description: Producción
   - url: http://localhost:4000
     description: Desarrollo Local

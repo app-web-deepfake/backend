@@ -1,0 +1,751 @@
+openapi: 3.1.0
+info:
+  title: Deepfake Detection API
+  version: 2.0.0
+  description: |
+    API para detección de deepfakes en imágenes y videos usando Facia AI.
+    
+    ## 📋 Flujo de uso
+    
+    1. **Solicitar URL de subida** - `POST /api/files/upload-url`
+    2. **Subir archivo a S3** - Usar la URL presignada desde el frontend
+    3. **Iniciar análisis** - `POST /api/analysis/start`
+    4. **Consultar resultado** - `POST /api/analysis/result`
+    5. **Verificar estado** (opcional) - `GET /api/analysis/status/:id`
+    
+    ## 🎯 Tipos de archivo soportados
+    
+    - **Imágenes:** PNG, JPG, JPEG (máx 50MB)
+    - **Videos:** MP4, MOV, WEBM (máx 500MB)
+    
+    ## ⏱️ Tiempos de procesamiento
+    
+    - Imágenes: 2-10 segundos
+    - Videos: 5-30 segundos
+
+  contact:
+    name: API Support
+    email: support@tudominio.com
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:4000
+    description: Desarrollo Local
+  - url: https://api.tudominio.com
+    description: Producción
+
+tags:
+  - name: Files
+    description: Gestión de archivos y subida a S3
+  - name: Analysis
+    description: Análisis de deepfake con Facia AI
+
+paths:
+
+  #####################################
+  ## POST /api/files/upload-url
+  #####################################
+  /api/files/upload-url:
+    post:
+      tags:
+        - Files
+      summary: Generar URL presignada para subir archivo
+      description: |
+        Genera credenciales temporales para subir un archivo directamente a S3 
+        desde el frontend, sin pasar por el servidor backend.
+        
+        **Seguridad:**
+        - URL válida por 1 hora
+        - Tamaño máximo: 5GB
+        - Solo archivos de imagen o video
+        
+        **Siguiente paso:**
+        Usar `uploadUrl` y `fields` para hacer un POST multipart desde el frontend.
+
+      operationId: generateUploadUrl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fileName:
+                  type: string
+                  description: Nombre original del archivo
+                  example: "video-sospechoso.mp4"
+                  minLength: 1
+                  maxLength: 255
+                fileType:
+                  type: string
+                  description: MIME type del archivo
+                  example: "video/mp4"
+                  enum:
+                    - image/jpeg
+                    - image/jpg
+                    - image/png
+                    - video/mp4
+                    - video/quicktime
+                    - video/webm
+              required:
+                - fileName
+                - fileType
+            examples:
+              video:
+                value:
+                  fileName: "video-prueba.mp4"
+                  fileType: "video/mp4"
+              image:
+                value:
+                  fileName: "foto-perfil.jpg"
+                  fileType: "image/jpeg"
+
+      responses:
+        "200":
+          description: ✅ URL presignada generada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadUrlResponse"
+              examples:
+                success:
+                  value:
+                    uploadUrl: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/"
+                    fields:
+                      bucket: "deepfake-detector-files"
+                      key: "1763532656440_video-prueba.mp4"
+                      X-Amz-Algorithm: "AWS4-HMAC-SHA256"
+                      X-Amz-Credential: "AKIAVZXYWLVGWQ5UBY5C/20251119/us-east-1/s3/aws4_request"
+                      X-Amz-Date: "20251119T040145Z"
+                      Policy: "eyJleHBpcmF0aW9uIjoi..."
+                      X-Amz-Signature: "d1e5219137f9969c..."
+                    fileUrl: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/1763532656440_video-prueba.mp4"
+
+        "400":
+          description: ❌ Parámetros inválidos o faltantes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                missingParams:
+                  value:
+                    success: false
+                    error: "fileName y fileType son requeridos"
+                invalidType:
+                  value:
+                    success: false
+                    error: "Tipo de archivo no soportado. Use imagen (png, jpg) o video (mp4, webm)"
+
+        "500":
+          description: ❌ Error del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  #####################################
+  ## POST /api/analysis/start
+  #####################################
+  /api/analysis/start:
+    post:
+      tags:
+        - Analysis
+      summary: Iniciar análisis de deepfake
+      description: |
+        Inicia el análisis de un archivo que ya fue subido a S3.
+        
+        **Proceso:**
+        1. Descarga el archivo de S3
+        2. Lo envía a Facia AI para análisis
+        3. Retorna un ID de referencia para consultar el resultado
+        
+        **⏱️ Tiempo estimado:**
+        - Imágenes: 2-10 segundos
+        - Videos: 5-30 segundos
+        
+        **Siguiente paso:**
+        Usar el `analysisId` retornado para consultar el resultado en `/api/analysis/result`
+
+      operationId: startAnalysis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fileUrl:
+                  type: string
+                  format: uri
+                  description: URL completa del archivo en S3 (obtenida de /api/files/upload-url)
+                  example: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/1763532656440_video.mp4"
+              required:
+                - fileUrl
+            examples:
+              video:
+                value:
+                  fileUrl: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/1763532656440_video.mp4"
+
+      responses:
+        "200":
+          description: ✅ Análisis iniciado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisStartResponse"
+              examples:
+                success:
+                  value:
+                    success: true
+                    analysisId: "29D027498EE8EBB"
+                    message: "Archivo enviado a análisis correctamente. El procesamiento puede tomar unos segundos."
+                    estimatedTime: "5-30 segundos"
+                    status: "processing"
+
+        "400":
+          description: ❌ URL del archivo no proporcionada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "404":
+          description: ❌ Archivo no encontrado en S3
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notFound:
+                  value:
+                    success: false
+                    error: "No se pudo acceder al archivo. Verifica que se haya subido correctamente."
+
+        "500":
+          description: ❌ Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "503":
+          description: ❌ Servicio de Facia no disponible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                serviceUnavailable:
+                  value:
+                    success: false
+                    error: "No se pudo enviar el archivo a análisis. Por favor, intenta de nuevo."
+
+  #####################################
+  ## POST /api/analysis/result
+  #####################################
+  /api/analysis/result:
+    post:
+      tags:
+        - Analysis
+      summary: Obtener resultado del análisis
+      description: |
+        Consulta el resultado del análisis usando el ID obtenido en `/api/analysis/start`.
+        
+        **⚡ Comportamiento con reintentos automáticos:**
+        - Reintenta hasta 10 veces si el resultado no está listo
+        - Espera 3 segundos entre cada intento
+        - Tiempo máximo de espera: ~30 segundos
+        
+        **📊 Estados del resultado:**
+        - `status: 0` → **Deepfake detectado** (contenido falso)
+        - `status: 1` → **Contenido auténtico** (no es deepfake)
+        - `status: null` → Aún procesando
+        
+        **🎯 Confianza del resultado:**
+        - `0-30%` → Muy probablemente auténtico
+        - `30-70%` → Zona gris (revisar manualmente)
+        - `70-100%` → Muy probablemente deepfake
+
+      operationId: getAnalysisResult
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                analysisId:
+                  type: string
+                  description: ID del análisis (obtenido de /api/analysis/start)
+                  example: "29D027498EE8EBB"
+              required:
+                - analysisId
+            examples:
+              request:
+                value:
+                  analysisId: "29D027498EE8EBB"
+
+      responses:
+        "200":
+          description: ✅ Resultado completo obtenido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResultComplete"
+              examples:
+                deepfakeDetected:
+                  summary: Deepfake detectado
+                  value:
+                    success: true
+                    processing: false
+                    result:
+                      analysisId: "29D027498EE8EBB"
+                      type: "deepfake"
+                      status: 0
+                      isDeepfake: true
+                      isAuthentic: false
+                      confidence: "87.32"
+                      verdict: "FAKE"
+                      deepfake_score: 0.8732
+                      decline_code: "FADR07"
+                      decline_reason: "Evasion attack detected."
+                      declined_proof: "https://api.facia.ai/api/image-url/691d5beca320adf85120e159"
+                      timestamp: "2025-11-19T04:01:45Z"
+
+                authenticContent:
+                  summary: Contenido auténtico
+                  value:
+                    success: true
+                    processing: false
+                    result:
+                      analysisId: "A9B123XYZ456"
+                      type: "deepfake"
+                      status: 1
+                      isDeepfake: false
+                      isAuthentic: true
+                      confidence: "12.45"
+                      verdict: "REAL"
+                      deepfake_score: 0.1245
+                      decline_code: null
+                      decline_reason: null
+                      declined_proof: null
+                      timestamp: "2025-11-19T04:02:30Z"
+
+        "202":
+          description: ⏳ Análisis aún en proceso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResultProcessing"
+              examples:
+                processing:
+                  value:
+                    success: true
+                    processing: true
+                    message: "El análisis aún está en proceso. Por favor, vuelve a consultar en unos segundos."
+                    result:
+                      analysisId: "29D027498EE8EBB"
+                      status: "processing"
+
+        "400":
+          description: ❌ ID de análisis no proporcionado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "404":
+          description: ❌ ID de análisis no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                notFound:
+                  value:
+                    success: false
+                    error: "No se pudo obtener el resultado. El ID de análisis puede ser inválido."
+
+        "408":
+          description: ⏰ Timeout - Procesamiento demorado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                timeout:
+                  value:
+                    success: false
+                    error: "El análisis está tomando más tiempo del esperado. Por favor, intenta de nuevo en unos momentos."
+
+        "500":
+          description: ❌ Error obteniendo resultado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  #####################################
+  ## GET /api/analysis/status/:id
+  #####################################
+  /api/analysis/status/{analysisId}:
+    get:
+      tags:
+        - Analysis
+      summary: Verificar estado del análisis (lightweight)
+      description: |
+        Endpoint ligero para verificar rápidamente si el análisis está completo.
+        
+        **🔄 Ideal para polling desde el frontend:**
+        ```javascript
+        // Ejemplo de polling cada 2 segundos
+        const checkStatus = async (analysisId) => {
+          const response = await fetch(`/api/analysis/status/${analysisId}`);
+          const data = await response.json();
+        
+          if (data.isComplete) {
+            // Obtener resultado completo
+            getFullResult(analysisId);
+          } else {
+            // Esperar 2s y reintentar
+            setTimeout(() => checkStatus(analysisId), 2000);
+          }
+        };
+        ```
+        
+        **⚡ Características:**
+        - Sin reintentos automáticos (responde inmediatamente)
+        - Payload mínimo (solo estado básico)
+        - Baja latencia (~50-100ms)
+
+      operationId: checkAnalysisStatus
+      parameters:
+        - name: analysisId
+          in: path
+          required: true
+          description: ID del análisis
+          schema:
+            type: string
+          example: "29D027498EE8EBB"
+
+      responses:
+        "200":
+          description: ✅ Estado obtenido exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusCheckResponse"
+              examples:
+                completed:
+                  summary: Análisis completado
+                  value:
+                    success: true
+                    analysisId: "29D027498EE8EBB"
+                    status: "completed"
+                    isComplete: true
+                    result:
+                      isDeepfake: true
+                      confidence: "87.32"
+                      verdict: "FAKE"
+
+                processing:
+                  summary: Aún procesando
+                  value:
+                    success: true
+                    analysisId: "29D027498EE8EBB"
+                    status: "processing"
+                    isComplete: false
+                    result: null
+
+        "400":
+          description: ❌ ID inválido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "404":
+          description: ❌ ID no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+        "500":
+          description: ❌ Error verificando estado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+
+    #################################
+    # Files Schemas
+    #################################
+    UploadUrlResponse:
+      type: object
+      required:
+        - uploadUrl
+        - fields
+        - fileUrl
+      properties:
+        uploadUrl:
+          type: string
+          format: uri
+          description: URL base para subir el archivo (POST multipart)
+          example: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/"
+        fields:
+          type: object
+          description: Campos que deben incluirse en el POST multipart
+          required:
+            - bucket
+            - key
+            - X-Amz-Algorithm
+            - X-Amz-Credential
+            - X-Amz-Date
+            - Policy
+            - X-Amz-Signature
+          properties:
+            bucket:
+              type: string
+              example: "deepfake-detector-files"
+            key:
+              type: string
+              example: "1763532656440_video.mp4"
+            X-Amz-Algorithm:
+              type: string
+              example: "AWS4-HMAC-SHA256"
+            X-Amz-Credential:
+              type: string
+              example: "AKIAVZXYWLVGWQ5UBY5C/20251119/us-east-1/s3/aws4_request"
+            X-Amz-Date:
+              type: string
+              example: "20251119T040145Z"
+            Policy:
+              type: string
+              example: "eyJleHBpcmF0aW9uIjoiMjAyNS0xMS0xOVQwMToz..."
+            X-Amz-Signature:
+              type: string
+              example: "d1e5219137f9969c5c869c1286ed25b7813fcdd8..."
+        fileUrl:
+          type: string
+          format: uri
+          description: URL completa del archivo una vez subido (usar en /api/analysis/start)
+          example: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/1763532656440_video.mp4"
+
+    #################################
+    # Analysis Schemas
+    #################################
+    AnalysisStartResponse:
+      type: object
+      required:
+        - success
+        - analysisId
+        - message
+        - status
+      properties:
+        success:
+          type: boolean
+          example: true
+        analysisId:
+          type: string
+          description: ID único del análisis (guardar para consultar resultado)
+          example: "29D027498EE8EBB"
+        message:
+          type: string
+          example: "Archivo enviado a análisis correctamente. El procesamiento puede tomar unos segundos."
+        estimatedTime:
+          type: string
+          description: Tiempo estimado de procesamiento
+          example: "5-30 segundos"
+        status:
+          type: string
+          enum:
+            - processing
+          example: "processing"
+
+    AnalysisResultComplete:
+      type: object
+      required:
+        - success
+        - processing
+        - result
+      properties:
+        success:
+          type: boolean
+          example: true
+        processing:
+          type: boolean
+          example: false
+        result:
+          type: object
+          required:
+            - analysisId
+            - status
+            - isDeepfake
+            - isAuthentic
+          properties:
+            analysisId:
+              type: string
+              description: ID del análisis
+              example: "29D027498EE8EBB"
+            type:
+              type: string
+              example: "deepfake"
+            status:
+              type: integer
+              description: "0 = deepfake detectado, 1 = contenido auténtico"
+              enum: [0, 1]
+              example: 0
+            isDeepfake:
+              type: boolean
+              description: true si es deepfake
+              example: true
+            isAuthentic:
+              type: boolean
+              description: true si es auténtico
+              example: false
+            verdict:
+              type: string
+              description: Veredicto simple
+              enum:
+                - FAKE
+                - REAL
+              example: "FAKE"
+            confidence:
+              type: string
+              description: Nivel de confianza en porcentaje (string para precisión)
+              example: "87.32"
+            deepfake_score:
+              type: number
+              format: float
+              description: Score original de Facia (0-1)
+              minimum: 0
+              maximum: 1
+              example: 0.8732
+            decline_code:
+              type: string
+              nullable: true
+              description: Código de rechazo (solo si es deepfake)
+              example: "FADR07"
+            decline_reason:
+              type: string
+              nullable: true
+              description: Motivo del rechazo legible
+              example: "Evasion attack detected."
+            declined_proof:
+              type: string
+              format: uri
+              nullable: true
+              description: URL de imagen de prueba (expira en 24h)
+              example: "https://api.facia.ai/api/image-url/691d5beca320adf85120e159"
+            timestamp:
+              type: string
+              format: date-time
+              description: Fecha y hora del análisis
+              example: "2025-11-19T04:01:45Z"
+
+    AnalysisResultProcessing:
+      type: object
+      required:
+        - success
+        - processing
+        - message
+        - result
+      properties:
+        success:
+          type: boolean
+          example: true
+        processing:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "El análisis aún está en proceso. Por favor, vuelve a consultar en unos segundos."
+        result:
+          type: object
+          required:
+            - analysisId
+            - status
+          properties:
+            analysisId:
+              type: string
+              example: "29D027498EE8EBB"
+            status:
+              type: string
+              enum:
+                - processing
+              example: "processing"
+
+    StatusCheckResponse:
+      type: object
+      required:
+        - success
+        - analysisId
+        - status
+        - isComplete
+      properties:
+        success:
+          type: boolean
+          example: true
+        analysisId:
+          type: string
+          example: "29D027498EE8EBB"
+        status:
+          type: string
+          enum:
+            - processing
+            - completed
+          example: "completed"
+        isComplete:
+          type: boolean
+          description: true si el análisis está completo
+          example: true
+        result:
+          type: object
+          nullable: true
+          description: Resultado resumido (solo si está completo)
+          properties:
+            isDeepfake:
+              type: boolean
+              example: true
+            confidence:
+              type: string
+              example: "87.32"
+            verdict:
+              type: string
+              enum:
+                - FAKE
+                - REAL
+              example: "FAKE"
+
+    #################################
+    # Error Schema
+    #################################
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          description: Mensaje de error legible
+          example: "No se pudo procesar la solicitud"
+        details:
+          type: string
+          nullable: true
+          description: Detalles técnicos (solo en desarrollo)
+          example: "S3 Access Denied: Invalid credentials"
+        code:
+          type: string
+          nullable: true
+          description: Código de error interno
+          example: "ERR_S3_ACCESS_DENIED"

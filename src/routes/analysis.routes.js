@@ -1,13 +1,14 @@
-import { Router } from "express";
+import express from 'express';
+import {
+    startAnalysis,
+    getAnalysisResult,
+    checkAnalysisStatus
+} from '../controllers/analysis.controller.js';
 
-const router = Router();
+const router = express.Router();
 
-router.post("/process", (req, res) => {
-    res.send("Aquí se procesará el archivo con Facia AI");
-});
-
-router.get("/:id", (req, res) => {
-    res.send("Aquí se devolverá el resultado del análisis");
-});
+router.post('/start', startAnalysis);           // /api/analysis/start
+router.post('/result', getAnalysisResult);      // /api/analysis/result
+router.get('/status/:referenceId', checkAnalysisStatus);  // /api/analysis/status/:id
 
 export default router;

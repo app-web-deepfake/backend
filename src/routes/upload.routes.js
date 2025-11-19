@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { getPresignedUrl } from "../controllers/upload.controller.js";
+import {getPresignedUrl} from "../controllers/files.controller.js";
 
 const router = Router();
 
-router.post("/presigned", getPresignedUrl);
+router.post('/upload-url', getPresignedUrl);
 
 export default router;

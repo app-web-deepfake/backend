@@ -15,3 +15,14 @@ console.log("ENV LOADED IN env.js:", {
 }
 );
 */
+
+export const {
+    PORT,
+    MONGO_URI,
+    AWS_REGION,
+    AWS_ACCESS,
+    AWS_SECRET,
+    S3_BUCKET,
+    FACIA_API_URL,
+    FACIA_API_KEY
+} = process.env;

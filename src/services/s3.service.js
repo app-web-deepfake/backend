@@ -9,14 +9,3 @@ const s3Client = new S3Client({
         secretAccessKey: AWS_SECRET
     }
 });
-
-export const getPresignedUrl = async (key, fileType) => {
-    const contentType = fileType === 'video' ? 'video/mp4' : 'image/jpeg';
-    const command = new PutObjectCommand({
-        Bucket: S3_BUCKET,
-        Key: key,
-        ContentType: contentType
-    });
-    const url = await getSignedUrl(s3Client, command, { expiresIn: 60 * 5 });
-    return { url, key };
-};

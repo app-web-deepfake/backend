@@ -9,6 +9,7 @@ const s3 = new S3Client({
     },
     runtime: "node",
 });
+console.log("🧪 Región detectada:", process.env.AWS_REGION);
 
 /**
  * @openapi

@@ -7,22 +7,19 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.join(__dirname, "../../.env") });
 
-/*
+
 console.log("ENV LOADED IN env.js:", {
     AWS_REGION: process.env.AWS_REGION,
     AWS_ACCESS: process.env.AWS_ACCESS,
     AWS_SECRET: process.env.AWS_SECRET ? "✅" : "❌",
 }
 );
-*/
+
 
 export const {
-    PORT,
     MONGO_URI,
     AWS_REGION,
     AWS_ACCESS,
     AWS_SECRET,
     S3_BUCKET,
-    FACIA_API_URL,
-    FACIA_API_KEY
 } = process.env;

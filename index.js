@@ -1,3 +1,4 @@
+import "dotenv/config";
 import app from "./src/app.js";
 
 const PORT = process.env.PORT || 4000;
@@ -10,5 +11,4 @@ if (process.env.NODE_ENV !== 'production') {
     });
 }
 
-// Para Vercel (serverless)
 export default app;

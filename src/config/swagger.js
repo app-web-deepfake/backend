@@ -6,9 +6,9 @@ const swaggerSpec = JSON.parse(JSON.stringify(swaggerSpecBase));
 
 // Actualizar servidor según entorno
 if (process.env.NODE_ENV === 'production') {
-    const productionUrl = process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : process.env.API_URL || 'https://tu-api.vercel.app';
+    const productionUrl = process.env.API_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+        'https://backend-iota-ten-94.vercel.app';  // ✅ Tu URL real
 
     swaggerSpec.servers = [
         {

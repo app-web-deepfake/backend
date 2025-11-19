@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Deepfake Detection API",
-    "version": "2.0.0",
+    "version": "1.0.0",
     "description": "API para detección de deepfakes en imágenes y videos usando Facia AI.\n\n## 📋 Flujo de uso\n\n1. **Solicitar URL de subida** - `POST /api/files/upload-url`\n2. **Subir archivo a S3** - Usar la URL presignada desde el frontend\n3. **Iniciar análisis** - `POST /api/analysis/start`\n4. **Consultar resultado** - `POST /api/analysis/result`\n5. **Verificar estado** (opcional) - `GET /api/analysis/status/:id`\n\n## 🎯 Tipos de archivo soportados\n\n- **Imágenes:** PNG, JPG, JPEG (máx 50MB)\n- **Videos:** MP4, MOV, WEBM (máx 500MB)\n\n## ⏱️ Tiempos de procesamiento\n\n- Imágenes: 2-10 segundos\n- Videos: 5-30 segundos\n",
     "contact": {
       "name": "API Support",
@@ -14,12 +14,12 @@
   },
   "servers": [
     {
-      "url": "http://localhost:4000",
-      "description": "Desarrollo Local"
+      "url": "https://backend-iota-ten-94.vercel.app",
+      "description": "Producción"
     },
     {
-      "url": "https://api.tudominio.com",
-      "description": "Producción"
+      "url": "http://localhost:4000",
+      "description": "Desarrollo Local"
     }
   ],
   "tags": [

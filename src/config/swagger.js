@@ -1,22 +1,10 @@
-// ✅ Import estático del JSON (funciona perfecto en Vercel)
-import swaggerSpecBase from "../docs/openapi.json" with { type: "json" };
+import yaml from "yamljs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-// ✅ Clonar y actualizar según el entorno
-const swaggerSpec = JSON.parse(JSON.stringify(swaggerSpecBase));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Actualizar servidor según entorno
-if (process.env.NODE_ENV === 'production') {
-    const productionUrl = process.env.API_URL ||
-        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
-        'https://backend-iota-ten-94.vercel.app';  // ✅ Tu URL real
-
-    swaggerSpec.servers = [
-        {
-            url: productionUrl,
-            description: 'Producción'
-        },
-        ...(swaggerSpec.servers || [])
-    ];
-}
+const swaggerSpec = yaml.load(path.join(__dirname, "../docs/openapi.yaml"));
 
 export default swaggerSpec;

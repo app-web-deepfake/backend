@@ -11,8 +11,8 @@ const app = express();
 
 // ✅ CORS configurado para desarrollo Y producción
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production'
-        ? process.env.FRONTEND_URL  // ⚠️ Configura esto en Vercel
+        origin: process.env.FRONTEND_URL || "http://localhost:5173"
+        ? process.env.FRONTEND_URL  //
         : "http://localhost:5173",   // Desarrollo local
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -48,5 +48,6 @@ app.use((req, res) => {
         path: req.path
     });
 });
+
 
 export default app;

@@ -44,9 +44,9 @@ tags:
 paths:
 
   #####################################
-  ## POST /api/files/upload-url
+  ## POST /upload-url
   #####################################
-  /api/files/upload-url:
+  /upload/upload-url:
     post:
       tags:
         - Files
@@ -146,9 +146,9 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   #####################################
-  ## POST /api/analysis/start
+  ## POST /analysis/start
   #####################################
-  /api/analysis/start:
+  /analysis/start:
     post:
       tags:
         - Analysis
@@ -166,7 +166,7 @@ paths:
         - Videos: 5-30 segundos
         
         **Siguiente paso:**
-        Usar el `analysisId` retornado para consultar el resultado en `/api/analysis/result`
+        Usar el `referenceId` retornado para consultar el resultado en `/api/analysis/result`
 
       operationId: startAnalysis
       requestBody:
@@ -199,7 +199,7 @@ paths:
                 success:
                   value:
                     success: true
-                    analysisId: "29D027498EE8EBB"
+                    referenceId: "29D027498EE8EBB"
                     message: "Archivo enviado a análisis correctamente. El procesamiento puede tomar unos segundos."
                     estimatedTime: "5-30 segundos"
                     status: "processing"
@@ -243,9 +243,9 @@ paths:
                     error: "No se pudo enviar el archivo a análisis. Por favor, intenta de nuevo."
 
   #####################################
-  ## POST /api/analysis/result
+  ## POST /analysis/result
   #####################################
-  /api/analysis/result:
+  /analysis/result:
     post:
       tags:
         - Analysis
@@ -276,16 +276,16 @@ paths:
             schema:
               type: object
               properties:
-                analysisId:
+                referenceId:
                   type: string
-                  description: ID del análisis (obtenido de /api/analysis/start)
+                  description: ID del análisis (obtenido de /analysis/start)
                   example: "29D027498EE8EBB"
               required:
-                - analysisId
+                - referenceId
             examples:
               request:
                 value:
-                  analysisId: "29D027498EE8EBB"
+                  referenceId: "29D027498EE8EBB"
 
       responses:
         "200":
@@ -301,7 +301,7 @@ paths:
                     success: true
                     processing: false
                     result:
-                      analysisId: "29D027498EE8EBB"
+                      referenceId: "29D027498EE8EBB"
                       type: "deepfake"
                       status: 0
                       isDeepfake: true
@@ -320,7 +320,7 @@ paths:
                     success: true
                     processing: false
                     result:
-                      analysisId: "A9B123XYZ456"
+                      referenceId: "A9B123XYZ456"
                       type: "deepfake"
                       status: 1
                       isDeepfake: false
@@ -346,7 +346,7 @@ paths:
                     processing: true
                     message: "El análisis aún está en proceso. Por favor, vuelve a consultar en unos segundos."
                     result:
-                      analysisId: "29D027498EE8EBB"
+                      referenceId: "29D027498EE8EBB"
                       status: "processing"
 
         "400":
@@ -388,9 +388,9 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   #####################################
-  ## GET /api/analysis/status/:id
+  ## GET /analysis/status/:referenceId
   #####################################
-  /api/analysis/status/{analysisId}:
+  /analysis/status/{referenceId}:
     get:
       tags:
         - Analysis
@@ -401,16 +401,16 @@ paths:
         **Ideal para polling desde el frontend:**
         ```javascript
         // Ejemplo de polling cada 2 segundos
-        const checkStatus = async (analysisId) => {
-          const response = await fetch(`/api/analysis/status/${analysisId}`);
+        const checkStatus = async (referenceId) => {
+          const response = await fetch(`/api/analysis/status/${referenceId}`);
           const data = await response.json();
         
           if (data.isComplete) {
             // Obtener resultado completo
-            getFullResult(analysisId);
+            getFullResult(referenceId);
           } else {
             // Esperar 2s y reintentar
-            setTimeout(() => checkStatus(analysisId), 2000);
+            setTimeout(() => checkStatus(referenceId), 2000);
           }
         };
         ```
@@ -422,7 +422,7 @@ paths:
 
       operationId: checkAnalysisStatus
       parameters:
-        - name: analysisId
+        - name: referenceId
           in: path
           required: true
           description: ID del análisis
@@ -442,7 +442,7 @@ paths:
                   summary: Análisis completado
                   value:
                     success: true
-                    analysisId: "29D027498EE8EBB"
+                    referenceId: "29D027498EE8EBB"
                     status: "completed"
                     isComplete: true
                     result:
@@ -454,7 +454,7 @@ paths:
                   summary: Aún procesando
                   value:
                     success: true
-                    analysisId: "29D027498EE8EBB"
+                    referenceId: "29D027498EE8EBB"
                     status: "processing"
                     isComplete: false
                     result: null
@@ -544,14 +544,14 @@ components:
       type: object
       required:
         - success
-        - analysisId
+        - referenceId
         - message
         - status
       properties:
         success:
           type: boolean
           example: true
-        analysisId:
+        referenceId:
           type: string
           description: ID único del análisis (guardar para consultar resultado)
           example: "29D027498EE8EBB"
@@ -584,12 +584,12 @@ components:
         result:
           type: object
           required:
-            - analysisId
+            - referenceId
             - status
             - isDeepfake
             - isAuthentic
           properties:
-            analysisId:
+            referenceId:
               type: string
               description: ID del análisis
               example: "29D027498EE8EBB"
@@ -669,10 +669,10 @@ components:
         result:
           type: object
           required:
-            - analysisId
+            - referenceId
             - status
           properties:
-            analysisId:
+            referenceId:
               type: string
               example: "29D027498EE8EBB"
             status:
@@ -685,14 +685,14 @@ components:
       type: object
       required:
         - success
-        - analysisId
+        - referenceId
         - status
         - isComplete
       properties:
         success:
           type: boolean
           example: true
-        analysisId:
+        referenceId:
           type: string
           example: "29D027498EE8EBB"
         status:

@@ -9,12 +9,12 @@ export const startAnalysis = async (req, res) => {
             return res.status(400).json({ error: "fileUrl requerido" });
         }
 
-        console.log("📢 Notificación de archivo subido:", fileUrl);
+        console.log("Notificación de archivo subido:", fileUrl);
 
         // Crear transacción en Facia y obtener reference_id
         const referenceId = await sendToFacia(fileUrl);
 
-        console.log("✅ Transacción creada en Facia, reference_id:", referenceId);
+        console.log("Transacción creada en Facia, reference_id:", referenceId);
 
         // Devolver el reference_id para que el frontend pueda consultar el resultado
         return res.status(200).json({
@@ -26,7 +26,7 @@ export const startAnalysis = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error notifyUploadDone:", error);
+        console.error("Error notifyUploadDone:", error);
         console.error("Stack:", error.stack);
 
         // Manejar errores específicos
@@ -61,12 +61,12 @@ export const getAnalysisResult = async (req, res) => {
             });
         }
 
-        console.log("📊 Consultando resultado para:", referenceId);
+        console.log("Consultando resultado para:", referenceId);
 
         // Obtener resultado de Facia (con reintentos automáticos)
         const result = await getFaciaResult(referenceId);
 
-        console.log("✅ Resultado obtenido:", result);
+        console.log("Resultado obtenido:", result);
 
         // Verificar si el resultado está completo
         const isComplete = result.status !== null && result.deepfake_score !== null;
@@ -105,7 +105,7 @@ export const getAnalysisResult = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error getAnalysisResult:", error);
+        console.error("Error getAnalysisResult:", error);
 
         // Manejar errores específicos
         let errorMessage = "Error obteniendo resultado del análisis";

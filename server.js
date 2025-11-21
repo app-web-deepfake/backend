@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 4000;
 
 connectDB().then(() => {
     app.listen(PORT, () => {
-        console.log(`✅ Backend corriendo en puerto ${PORT}`);
+        console.log(`Backend corriendo en puerto ${PORT}`);
         console.log("AWS REGION:", process.env.AWS_REGION);
         console.log("AWS ACCESS:", process.env.AWS_ACCESS);
         console.log("AWS SECRET:", process.env.AWS_SECRET ? "Cargada" : "No cargada");

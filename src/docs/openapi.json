@@ -3,7 +3,7 @@
   "info": {
     "title": "Deepfake Detection API",
     "version": "1.0.0",
-    "description": "API para detección de deepfakes en imágenes y videos usando Facia AI.\n\n## 📋 Flujo de uso\n\n1. **Solicitar URL de subida** - `POST /api/files/upload-url`\n2. **Subir archivo a S3** - Usar la URL presignada desde el frontend\n3. **Iniciar análisis** - `POST /api/analysis/start`\n4. **Consultar resultado** - `POST /api/analysis/result`\n5. **Verificar estado** (opcional) - `GET /api/analysis/status/:id`\n\n## 🎯 Tipos de archivo soportados\n\n- **Imágenes:** PNG, JPG, JPEG (máx 50MB)\n- **Videos:** MP4, MOV, WEBM (máx 500MB)\n\n## ⏱️ Tiempos de procesamiento\n\n- Imágenes: 2-10 segundos\n- Videos: 5-30 segundos\n",
+    "description": "API para detección de deepfakes en imágenes y videos usando Facia AI.\n\n## Flujo de uso\n\n1. **Solicitar URL de subida** - `POST /api/files/upload-url`\n2. **Subir archivo a S3** - Usar la URL presignada desde el frontend\n3. **Iniciar análisis** - `POST /api/analysis/start`\n4. **Consultar resultado** - `POST /api/analysis/result`\n5. **Verificar estado** (opcional) - `GET /api/analysis/status/:id`\n\n## 🎯 Tipos de archivo soportados\n\n- **Imágenes:** PNG, JPG, JPEG (máx 50MB)\n- **Videos:** MP4, MOV, WEBM (máx 500MB)\n\n## ⏱️ Tiempos de procesamiento\n\n- Imágenes: 2-10 segundos\n- Videos: 5-30 segundos\n",
     "contact": {
       "name": "API Support",
       "email": "support@tudominio.com"
@@ -93,7 +93,7 @@
         },
         "responses": {
           "200": {
-            "description": "✅ URL presignada generada exitosamente",
+            "description": "URL presignada generada exitosamente",
             "content": {
               "application/json": {
                 "schema": {
@@ -120,7 +120,7 @@
             }
           },
           "400": {
-            "description": "❌ Parámetros inválidos o faltantes",
+            "description": "Parámetros inválidos o faltantes",
             "content": {
               "application/json": {
                 "schema": {
@@ -144,7 +144,7 @@
             }
           },
           "500": {
-            "description": "❌ Error del servidor",
+            "description": "Error del servidor",
             "content": {
               "application/json": {
                 "schema": {
@@ -162,7 +162,7 @@
           "Analysis"
         ],
         "summary": "Iniciar análisis de deepfake",
-        "description": "Inicia el análisis de un archivo que ya fue subido a S3.\n\n**Proceso:**\n1. Descarga el archivo de S3\n2. Lo envía a Facia AI para análisis\n3. Retorna un ID de referencia para consultar el resultado\n\n**⏱️ Tiempo estimado:**\n- Imágenes: 2-10 segundos\n- Videos: 5-30 segundos\n\n**Siguiente paso:**\nUsar el `analysisId` retornado para consultar el resultado en `/api/analysis/result`\n",
+        "description": "Inicia el análisis de un archivo que ya fue subido a S3.\n\n**Proceso:**\n1. Descarga el archivo de S3\n2. Lo envía a Facia AI para análisis\n3. Retorna un ID de referencia para consultar el resultado\n\n**Tiempo estimado:**\n- Imágenes: 2-10 segundos\n- Videos: 5-30 segundos\n\n**Siguiente paso:**\nUsar el `analysisId` retornado para consultar el resultado en `/api/analysis/result`\n",
         "operationId": "startAnalysis",
         "requestBody": {
           "required": true,
@@ -194,7 +194,7 @@
         },
         "responses": {
           "200": {
-            "description": "✅ Análisis iniciado correctamente",
+            "description": "Análisis iniciado correctamente",
             "content": {
               "application/json": {
                 "schema": {
@@ -215,7 +215,7 @@
             }
           },
           "400": {
-            "description": "❌ URL del archivo no proporcionada",
+            "description": "URL del archivo no proporcionada",
             "content": {
               "application/json": {
                 "schema": {
@@ -225,7 +225,7 @@
             }
           },
           "404": {
-            "description": "❌ Archivo no encontrado en S3",
+            "description": "Archivo no encontrado en S3",
             "content": {
               "application/json": {
                 "schema": {
@@ -243,7 +243,7 @@
             }
           },
           "500": {
-            "description": "❌ Error interno del servidor",
+            "description": "Error interno del servidor",
             "content": {
               "application/json": {
                 "schema": {
@@ -253,7 +253,7 @@
             }
           },
           "503": {
-            "description": "❌ Servicio de Facia no disponible",
+            "description": "Servicio de Facia no disponible",
             "content": {
               "application/json": {
                 "schema": {
@@ -279,7 +279,7 @@
           "Analysis"
         ],
         "summary": "Obtener resultado del análisis",
-        "description": "Consulta el resultado del análisis usando el ID obtenido en `/api/analysis/start`.\n\n**⚡ Comportamiento con reintentos automáticos:**\n- Reintenta hasta 10 veces si el resultado no está listo\n- Espera 3 segundos entre cada intento\n- Tiempo máximo de espera: ~30 segundos\n\n**📊 Estados del resultado:**\n- `status: 0` → **Deepfake detectado** (contenido falso)\n- `status: 1` → **Contenido auténtico** (no es deepfake)\n- `status: null` → Aún procesando\n\n**🎯 Confianza del resultado:**\n- `0-30%` → Muy probablemente auténtico\n- `30-70%` → Zona gris (revisar manualmente)\n- `70-100%` → Muy probablemente deepfake\n",
+        "description": "Consulta el resultado del análisis usando el ID obtenido en `/api/analysis/start`.\n\n**Comportamiento con reintentos automáticos:**\n- Reintenta hasta 10 veces si el resultado no está listo\n- Espera 3 segundos entre cada intento\n- Tiempo máximo de espera: ~30 segundos\n\n**Estados del resultado:**\n- `status: 0` → **Deepfake detectado** (contenido falso)\n- `status: 1` → **Contenido auténtico** (no es deepfake)\n- `status: null` → Aún procesando\n\n**Confianza del resultado:**\n- `0-30%` → Muy probablemente auténtico\n- `30-70%` → Zona gris (revisar manualmente)\n- `70-100%` → Muy probablemente deepfake\n",
         "operationId": "getAnalysisResult",
         "requestBody": {
           "required": true,
@@ -310,7 +310,7 @@
         },
         "responses": {
           "200": {
-            "description": "✅ Resultado completo obtenido",
+            "description": "Resultado completo obtenido",
             "content": {
               "application/json": {
                 "schema": {
@@ -364,7 +364,7 @@
             }
           },
           "202": {
-            "description": "⏳ Análisis aún en proceso",
+            "description": "Análisis aún en proceso",
             "content": {
               "application/json": {
                 "schema": {
@@ -387,7 +387,7 @@
             }
           },
           "400": {
-            "description": "❌ ID de análisis no proporcionado",
+            "description": "ID de análisis no proporcionado",
             "content": {
               "application/json": {
                 "schema": {
@@ -397,7 +397,7 @@
             }
           },
           "404": {
-            "description": "❌ ID de análisis no encontrado",
+            "description": "ID de análisis no encontrado",
             "content": {
               "application/json": {
                 "schema": {
@@ -415,7 +415,7 @@
             }
           },
           "408": {
-            "description": "⏰ Timeout - Procesamiento demorado",
+            "description": "Timeout - Procesamiento demorado",
             "content": {
               "application/json": {
                 "schema": {
@@ -433,7 +433,7 @@
             }
           },
           "500": {
-            "description": "❌ Error obteniendo resultado",
+            "description": "Error obteniendo resultado",
             "content": {
               "application/json": {
                 "schema": {
@@ -451,7 +451,7 @@
           "Analysis"
         ],
         "summary": "Verificar estado del análisis (lightweight)",
-        "description": "Endpoint ligero para verificar rápidamente si el análisis está completo.\n\n**🔄 Ideal para polling desde el frontend:**\n```javascript\n// Ejemplo de polling cada 2 segundos\nconst checkStatus = async (analysisId) => {\n  const response = await fetch(`/api/analysis/status/${analysisId}`);\n  const data = await response.json();\n\n  if (data.isComplete) {\n    // Obtener resultado completo\n    getFullResult(analysisId);\n  } else {\n    // Esperar 2s y reintentar\n    setTimeout(() => checkStatus(analysisId), 2000);\n  }\n};\n```\n\n**⚡ Características:**\n- Sin reintentos automáticos (responde inmediatamente)\n- Payload mínimo (solo estado básico)\n- Baja latencia (~50-100ms)\n",
+        "description": "Endpoint ligero para verificar rápidamente si el análisis está completo.\n\n**Ideal para polling desde el frontend:**\n```javascript\n// Ejemplo de polling cada 2 segundos\nconst checkStatus = async (analysisId) => {\n  const response = await fetch(`/api/analysis/status/${analysisId}`);\n  const data = await response.json();\n\n  if (data.isComplete) {\n    // Obtener resultado completo\n    getFullResult(analysisId);\n  } else {\n    // Esperar 2s y reintentar\n    setTimeout(() => checkStatus(analysisId), 2000);\n  }\n};\n```\n\n**⚡ Características:**\n- Sin reintentos automáticos (responde inmediatamente)\n- Payload mínimo (solo estado básico)\n- Baja latencia (~50-100ms)\n",
         "operationId": "checkAnalysisStatus",
         "parameters": [
           {
@@ -467,7 +467,7 @@
         ],
         "responses": {
           "200": {
-            "description": "✅ Estado obtenido exitosamente",
+            "description": "Estado obtenido exitosamente",
             "content": {
               "application/json": {
                 "schema": {
@@ -503,7 +503,7 @@
             }
           },
           "400": {
-            "description": "❌ ID inválido",
+            "description": "ID inválido",
             "content": {
               "application/json": {
                 "schema": {
@@ -513,7 +513,7 @@
             }
           },
           "404": {
-            "description": "❌ ID no encontrado",
+            "description": "ID no encontrado",
             "content": {
               "application/json": {
                 "schema": {
@@ -523,7 +523,7 @@
             }
           },
           "500": {
-            "description": "❌ Error verificando estado",
+            "description": "Error verificando estado",
             "content": {
               "application/json": {
                 "schema": {

@@ -5,7 +5,7 @@ info:
   description: |
     API para detección de deepfakes en imágenes y videos usando Facia AI.
     
-    ## 📋 Flujo de uso
+    ## Flujo de uso
     
     1. **Solicitar URL de subida** - `POST /api/files/upload-url`
     2. **Subir archivo a S3** - Usar la URL presignada desde el frontend
@@ -13,12 +13,12 @@ info:
     4. **Consultar resultado** - `POST /api/analysis/result`
     5. **Verificar estado** (opcional) - `GET /api/analysis/status/:id`
     
-    ## 🎯 Tipos de archivo soportados
+    ## Tipos de archivo soportados
     
     - **Imágenes:** PNG, JPG, JPEG (máx 50MB)
     - **Videos:** MP4, MOV, WEBM (máx 500MB)
     
-    ## ⏱️ Tiempos de procesamiento
+    ## Tiempos de procesamiento
     
     - Imágenes: 2-10 segundos
     - Videos: 5-30 segundos
@@ -103,7 +103,7 @@ paths:
 
       responses:
         "200":
-          description: ✅ URL presignada generada exitosamente
+          description: URL presignada generada exitosamente
           content:
             application/json:
               schema:
@@ -123,7 +123,7 @@ paths:
                     fileUrl: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/1763532656440_video-prueba.mp4"
 
         "400":
-          description: ❌ Parámetros inválidos o faltantes
+          description: Parámetros inválidos o faltantes
           content:
             application/json:
               schema:
@@ -139,7 +139,7 @@ paths:
                     error: "Tipo de archivo no soportado. Use imagen (png, jpg) o video (mp4, webm)"
 
         "500":
-          description: ❌ Error del servidor
+          description: Error del servidor
           content:
             application/json:
               schema:
@@ -161,7 +161,7 @@ paths:
         2. Lo envía a Facia AI para análisis
         3. Retorna un ID de referencia para consultar el resultado
         
-        **⏱️ Tiempo estimado:**
+        **Tiempo estimado:**
         - Imágenes: 2-10 segundos
         - Videos: 5-30 segundos
         
@@ -190,7 +190,7 @@ paths:
 
       responses:
         "200":
-          description: ✅ Análisis iniciado correctamente
+          description: Análisis iniciado correctamente
           content:
             application/json:
               schema:
@@ -205,14 +205,14 @@ paths:
                     status: "processing"
 
         "400":
-          description: ❌ URL del archivo no proporcionada
+          description: URL del archivo no proporcionada
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
         "404":
-          description: ❌ Archivo no encontrado en S3
+          description: Archivo no encontrado en S3
           content:
             application/json:
               schema:
@@ -224,14 +224,14 @@ paths:
                     error: "No se pudo acceder al archivo. Verifica que se haya subido correctamente."
 
         "500":
-          description: ❌ Error interno del servidor
+          description: Error interno del servidor
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
         "503":
-          description: ❌ Servicio de Facia no disponible
+          description: Servicio de Facia no disponible
           content:
             application/json:
               schema:
@@ -253,17 +253,17 @@ paths:
       description: |
         Consulta el resultado del análisis usando el ID obtenido en `/api/analysis/start`.
         
-        **⚡ Comportamiento con reintentos automáticos:**
+        **Comportamiento con reintentos automáticos:**
         - Reintenta hasta 10 veces si el resultado no está listo
         - Espera 3 segundos entre cada intento
         - Tiempo máximo de espera: ~30 segundos
         
-        **📊 Estados del resultado:**
+        **Estados del resultado:**
         - `status: 0` → **Deepfake detectado** (contenido falso)
         - `status: 1` → **Contenido auténtico** (no es deepfake)
         - `status: null` → Aún procesando
         
-        **🎯 Confianza del resultado:**
+        **Confianza del resultado:**
         - `0-30%` → Muy probablemente auténtico
         - `30-70%` → Zona gris (revisar manualmente)
         - `70-100%` → Muy probablemente deepfake
@@ -289,7 +289,7 @@ paths:
 
       responses:
         "200":
-          description: ✅ Resultado completo obtenido
+          description: Resultado completo obtenido
           content:
             application/json:
               schema:
@@ -334,7 +334,7 @@ paths:
                       timestamp: "2025-11-19T04:02:30Z"
 
         "202":
-          description: ⏳ Análisis aún en proceso
+          description: Análisis aún en proceso
           content:
             application/json:
               schema:
@@ -350,14 +350,14 @@ paths:
                       status: "processing"
 
         "400":
-          description: ❌ ID de análisis no proporcionado
+          description: ID de análisis no proporcionado
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
         "404":
-          description: ❌ ID de análisis no encontrado
+          description: ID de análisis no encontrado
           content:
             application/json:
               schema:
@@ -369,7 +369,7 @@ paths:
                     error: "No se pudo obtener el resultado. El ID de análisis puede ser inválido."
 
         "408":
-          description: ⏰ Timeout - Procesamiento demorado
+          description: Timeout - Procesamiento demorado
           content:
             application/json:
               schema:
@@ -381,7 +381,7 @@ paths:
                     error: "El análisis está tomando más tiempo del esperado. Por favor, intenta de nuevo en unos momentos."
 
         "500":
-          description: ❌ Error obteniendo resultado
+          description: Error obteniendo resultado
           content:
             application/json:
               schema:
@@ -398,7 +398,7 @@ paths:
       description: |
         Endpoint ligero para verificar rápidamente si el análisis está completo.
         
-        **🔄 Ideal para polling desde el frontend:**
+        **Ideal para polling desde el frontend:**
         ```javascript
         // Ejemplo de polling cada 2 segundos
         const checkStatus = async (analysisId) => {
@@ -415,7 +415,7 @@ paths:
         };
         ```
         
-        **⚡ Características:**
+        **Características:**
         - Sin reintentos automáticos (responde inmediatamente)
         - Payload mínimo (solo estado básico)
         - Baja latencia (~50-100ms)
@@ -432,7 +432,7 @@ paths:
 
       responses:
         "200":
-          description: ✅ Estado obtenido exitosamente
+          description: Estado obtenido exitosamente
           content:
             application/json:
               schema:
@@ -460,21 +460,21 @@ paths:
                     result: null
 
         "400":
-          description: ❌ ID inválido
+          description: ID inválido
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
         "404":
-          description: ❌ ID no encontrado
+          description: ID no encontrado
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
         "500":
-          description: ❌ Error verificando estado
+          description: Error verificando estado
           content:
             application/json:
               schema:

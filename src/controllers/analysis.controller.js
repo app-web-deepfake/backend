@@ -83,24 +83,52 @@ export const getAnalysisResult = async (req, res) => {
             });
         }
 
-        // Resultado completo
+        // ----------------------------
+        // LÓGICA DE VEREDICTO PERSONALIZADA
+        // ----------------------------
+        // Regla A: Si deepfake_score < 0.6 => considerarlo NO deepfake (REAL)
+        const score = result.deepfake_score;
+        const scoreIndicatesReal = typeof score === 'number' && score < 0.6;
+
+        // Regla B: Si decline_code === "FADR07" => NO deepfake (Evasion attack detected -> tratar como real)
+        const evasionAttackDetected = result.decline_code === "FADR07";
+
+        // Regla C: Si Facia reporta status === 1 => real
+        const faciaSaysReal = result.status === 1;
+
+        // Determinar si es deepfake SOLO si NO se cumple ninguna excepción
+        const finalIsDeepfake =
+            // si Facia dice 0 (fake) *y* no se cumple scoreIndicatesReal *y* no es FADR07
+            (result.status === 0) &&
+            !scoreIndicatesReal &&
+            !evasionAttackDetected;
+
+        const finalVerdict = finalIsDeepfake ? "FAKE" : "REAL";
+
+        // Responder al frontend con la info original + veredicto aplicado
         return res.status(200).json({
             success: true,
             processing: false,
             result: {
                 analysisId: result.reference_id,
-                verdict: result.status === 0 ? "FAKE" : "REAL",  // NUEVO
-                timestamp: new Date().toISOString(),  // NUEVO
+                verdict: finalVerdict,
+                timestamp: new Date().toISOString(),
                 type: result.type,
-                status: result.status, // 0 = rechazado (deepfake), 1 = aprobado (auténtico)
-                isDeepfake: result.status === 0,
-                isAuthentic: result.status === 1,
-                confidence: result.deepfake_score ? (result.deepfake_score * 100).toFixed(2) : null,
-                deepfake_score: result.deepfake_score,
+                status: result.status, // valor original de Facia
+                isDeepfake: finalIsDeepfake,
+                isAuthentic: !finalIsDeepfake,
+                confidence: (typeof score === 'number') ? (score * 100).toFixed(2) : null,
+                deepfake_score: score,
                 decline_code: result.decline_code,
                 decline_reason: result.decline_reason,
                 declined_proof: result.declined_proof,
-                client_reference: result.client_reference
+                client_reference: result.client_reference,
+                // Para depuración: qué reglas aplicaron
+                rule_applied: {
+                    scoreIndicatesReal,
+                    evasionAttackDetected,
+                    facia_original_status: result.status
+                }
             }
         });
 
@@ -146,15 +174,27 @@ export const checkAnalysisStatus = async (req, res) => {
 
         const isComplete = result.status !== null && result.deepfake_score !== null;
 
+        let computed = null;
+        if (isComplete) {
+            const score = result.deepfake_score;
+            const scoreIndicatesReal = typeof score === 'number' && score < 0.6;
+            const evasionAttackDetected = result.decline_code === "FADR07";
+
+            const finalIsDeepfake = (result.status === 0) && !scoreIndicatesReal && !evasionAttackDetected;
+            computed = {
+                isDeepfake: finalIsDeepfake,
+                confidence: (typeof score === 'number') ? (score * 100).toFixed(2) : null,
+                verdict: finalIsDeepfake ? "FAKE" : "REAL",
+                rule_applied: { scoreIndicatesReal, evasionAttackDetected }
+            };
+        }
+
         return res.status(200).json({
             success: true,
             analysisId: referenceId,
             status: isComplete ? "completed" : "processing",
             isComplete: isComplete,
-            result: isComplete ? {
-                isDeepfake: result.status === 0,
-                confidence: (result.deepfake_score * 100).toFixed(2)
-            } : null
+            result: computed
         });
 
     } catch (error) {

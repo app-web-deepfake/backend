@@ -238,6 +238,9 @@ export const sendToFaciaFormData = async (fileUrl) => {
         }
 
         console.log("📤 [FORM-DATA] Enviando a Facia API...");
+        console.log("⚠️ NOTA: Facia está diseñado para liveness detection (selfies en vivo)");
+        console.log("   Si envías videos/fotos pregrabadas, puede marcarlas como fake");
+        console.log("   porque detecta que NO es una captura en vivo de cámara");
 
         const response = await axios.post(
             `${FACIA_API_URL}/liveness`,

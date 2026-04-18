@@ -9,7 +9,7 @@ const s3 = new S3Client({
     },
     runtime: "node",
 });
-console.log("🧪 Región detectada:", process.env.AWS_REGION);
+console.log("Región detectada:", process.env.AWS_REGION);
 
 /**
  * @openapi
@@ -29,20 +29,20 @@ console.log("🧪 Región detectada:", process.env.AWS_REGION);
 // --- 1. Crear URL presignada para subir archivo ---
 export const getPresignedUrl = async (req, res) => {
     try {
-        console.log("🔥 Generando PRESIGNED POST");
-        console.log("📥 Body recibido:", req.body);
+        console.log("Generando PRESIGNED POST");
+        console.log("Body recibido:", req.body);
 
         const { fileName, fileType } = req.body;
 
         if (!fileName || !fileType) {
-            console.error("❌ Faltan parámetros:", { fileName, fileType });
+            console.error("Faltan parámetros:", { fileName, fileType });
             return res.status(400).json({ error: "fileName y fileType son requeridos" });
         }
 
         const key = `${Date.now()}_${fileName}`;
-        console.log("🔑 Key generada:", key);
+        console.log("Key generada:", key);
 
-        // ✅ CONFIGURACIÓN CORRECTA DEL PRESIGNED POST
+        // CONFIGURACIÓN DEL PRESIGNED POST
         const { url, fields } = await createPresignedPost(s3, {
             Bucket: process.env.S3_BUCKET,
             Key: key,
@@ -54,15 +54,15 @@ export const getPresignedUrl = async (req, res) => {
             Expires: 3600, // 1 hora
         });
 
-        console.log("🎉 Presigned POST generado exitosamente");
-        console.log("📍 Upload URL:", url);
-        console.log("📋 Fields:", fields);
+        console.log("Presigned POST generado exitosamente");
+        console.log("Upload URL:", url);
+        console.log("Fields:", fields);
 
-        // ✅ Construir la URL final del archivo CORRECTAMENTE
+        // Construir la URL final del archivo
         const cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
         const fileUrl = `${cleanUrl}/${key}`;
 
-        console.log("🌐 File URL:", fileUrl);
+        console.log("File URL:", fileUrl);
 
         return res.json({
             uploadUrl: url,
@@ -71,7 +71,7 @@ export const getPresignedUrl = async (req, res) => {
         });
 
     } catch (err) {
-        console.error("❌ Error generando presigned POST:", err);
+        console.error("Error generando presigned POST:", err);
         console.error("Stack:", err.stack);
         return res.status(500).json({
             error: "Failed to generate presigned POST",

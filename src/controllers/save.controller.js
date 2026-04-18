@@ -15,7 +15,7 @@ export const saveFileData = async (req, res) => {
             data: saved
         });
     } catch (error) {
-        console.log("❌ Error guardando archivo", error);
+        console.log("Error guardando archivo", error);
         res.status(500).json({ error: "Error guardando archivo" });
     }
 };

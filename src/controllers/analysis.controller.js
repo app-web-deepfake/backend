@@ -22,7 +22,7 @@ export const startAnalysis = async (req, res) => {
             analysisId: referenceId,
             message: "Archivo enviado a análisis correctamente. El procesamiento puede tomar unos segundos.",
             estimatedTime: "5-30 segundos",
-            status: "processing"  // NUEVO
+            status: "processing"
         });
 
     } catch (error) {
@@ -63,7 +63,7 @@ export const getAnalysisResult = async (req, res) => {
 
         console.log("Consultando resultado para:", referenceId);
 
-        // Obtener resultado de Facia (con reintentos automáticos)
+        // Obtener resultado de Facia
         const result = await getFaciaResult(referenceId);
 
         console.log("Resultado obtenido:", result);
@@ -83,9 +83,6 @@ export const getAnalysisResult = async (req, res) => {
             });
         }
 
-        // ----------------------------
-        // LÓGICA DE VEREDICTO PERSONALIZADA
-        // ----------------------------
         // Regla A: Si deepfake_score < 0.6 => considerarlo NO deepfake (REAL)
         const score = result.deepfake_score;
         const scoreIndicatesReal = typeof score === 'number' && score < 0.6;
@@ -155,7 +152,7 @@ export const getAnalysisResult = async (req, res) => {
     }
 };
 
-// --- 4. BONUS: Endpoint para verificar estado del análisis ---
+// --- 4. Endpoint para verificar estado del análisis ---
 export const checkAnalysisStatus = async (req, res) => {
     try {
         const { referenceId } = req.params;
@@ -167,9 +164,8 @@ export const checkAnalysisStatus = async (req, res) => {
             });
         }
 
-        console.log("🔍 Verificando estado para:", referenceId);
+        console.log("Verificando estado para:", referenceId);
 
-        // Hacer solo 1 intento sin reintentos
         const result = await getFaciaResult(referenceId, 1, 0);
 
         const isComplete = result.status !== null && result.deepfake_score !== null;
@@ -198,7 +194,7 @@ export const checkAnalysisStatus = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error checkAnalysisStatus:", error);
+        console.error("Error checkAnalysisStatus:", error);
         return res.status(500).json({
             success: false,
             error: "Error verificando estado del análisis"

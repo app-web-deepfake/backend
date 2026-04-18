@@ -2,6 +2,7 @@ import express from "express";
 import uploadRoutes from "./routes/upload.routes.js";
 import faciaRoutes from "./routes/facia.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import historialRoutes from "./routes/historial.routes.js";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./config/swagger.js";
 import cors from "cors";
@@ -40,6 +41,7 @@ app.use("/facia", faciaRoutes);
 app.use("/auth", authRoutes);
 app.use("/upload", uploadRoutes);
 app.use("/analysis", analysisRoutes);
+app.use("/historial", historialRoutes);
 
 // ✅ Manejo de rutas no encontradas
 app.use((req, res) => {

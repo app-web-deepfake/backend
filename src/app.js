@@ -23,8 +23,10 @@ app.use(cors({
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Swagger
-app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// Swagger solo en desarrollo
+if (process.env.NODE_ENV !== "production") {
+    app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+}
 
 // ✅ Ruta de health check (para verificar que el servidor funciona)
 app.get("/", (req, res) => {

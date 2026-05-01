@@ -4,11 +4,12 @@ import {
     getAnalysisResult,
     checkAnalysisStatus
 } from '../controllers/analysis.controller.js';
+import { optionalAuth } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-router.post('/start', startAnalysis);           // /api/analysis/start
-router.post('/result', getAnalysisResult);      // /api/analysis/result
-router.get('/status/:referenceId', checkAnalysisStatus);  // /api/analysis/status/:id
+router.post('/start', optionalAuth, startAnalysis);
+router.post('/result', optionalAuth, getAnalysisResult);
+router.get('/status/:referenceId', checkAnalysisStatus);
 
 export default router;

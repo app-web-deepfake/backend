@@ -1,38 +1,41 @@
 import { sendToFacia, getFaciaResult } from '../services/facia.service.js';
+import { saveAnalysisRecord } from './historial.controller.js';
 
 // --- 2. Notificar que el archivo está listo y enviar a Facia ---
 export const startAnalysis = async (req, res) => {
     try {
-        const { fileUrl } = req.body;
+        const { fileUrl, fileName } = req.body;
 
         if (!fileUrl) {
             return res.status(400).json({ error: "fileUrl requerido" });
         }
 
-        console.log("Notificación de archivo subido:", fileUrl);
-
-        // Crear transacción en Facia y obtener reference_id
         const referenceId = await sendToFacia(fileUrl);
 
-        console.log("Transacción creada en Facia, reference_id:", referenceId);
+        // Guardar registro inicial en historial (pendiente de resultado)
+        saveAnalysisRecord({
+            userId: req.userId || null,
+            fileUrl,
+            fileName: fileName || null,
+            faciaReferenceId: referenceId,
+            verdict: "processing",
+            isDeepfake: null,
+            confidence: null,
+            faciaResponse: null
+        }).catch(() => {});
 
-        // Devolver el reference_id para que el frontend pueda consultar el resultado
         return res.status(200).json({
             success: true,
             analysisId: referenceId,
-            message: "Archivo enviado a análisis correctamente. El procesamiento puede tomar unos segundos.",
+            message: "Archivo enviado a análisis correctamente.",
             estimatedTime: "5-30 segundos",
             status: "processing"
         });
 
     } catch (error) {
         console.error("Error notifyUploadDone:", error);
-        console.error("Stack:", error.stack);
-
-        // Manejar errores específicos
         let errorMessage = "Error interno del servidor";
         let statusCode = 500;
-
         if (error.message.includes("FailedFacia")) {
             errorMessage = "No se pudo enviar el archivo a análisis. Por favor, intenta de nuevo.";
             statusCode = 503;
@@ -40,7 +43,6 @@ export const startAnalysis = async (req, res) => {
             errorMessage = "No se pudo acceder al archivo. Verifica que se haya subido correctamente.";
             statusCode = 404;
         }
-
         return res.status(statusCode).json({
             success: false,
             error: errorMessage,

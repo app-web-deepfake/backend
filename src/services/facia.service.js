@@ -91,8 +91,7 @@ async function downloadFileFromS3(fileUrl) {
 
         const url = new URL(fileUrl);
         const bucket = process.env.S3_BUCKET;
-        const key = url.pathname.substring(1);
-
+        const key = decodeURIComponent(url.pathname.substring(1));
         console.log("Bucket:", bucket);
         console.log("Key:", key);
 

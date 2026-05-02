@@ -5,6 +5,7 @@ import faciaRoutes from "./routes/facia.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import historialRoutes from "./routes/historial.routes.js";
 import analysisRoutes from "./routes/analysis.routes.js";
+import swaggerSpec from "./config/swagger.js";
 
 const app = express();
 
@@ -21,17 +22,42 @@ app.use(cors({
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Swagger — solo desarrollo local, import dinámico para evitar errores en Vercel
-if (process.env.NODE_ENV !== "production") {
-    try {
-        const swaggerUi = (await import("swagger-ui-express")).default;
-        const swaggerSpec = (await import("./config/swagger.js")).default;
-        app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-        console.log("Swagger disponible en /docs");
-    } catch (e) {
-        console.warn("Swagger no disponible:", e.message);
-    }
-}
+// Documentacion — Swagger UI via CDN (funciona en local y en Vercel)
+app.get("/api-docs/spec", (req, res) => {
+    res.json(swaggerSpec);
+});
+
+app.get("/api-docs", (req, res) => {
+    res.send(`<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Deepfake Detection API - Documentacion</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" />
+  <style>
+    body { margin: 0; }
+    .topbar { display: none; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = () => {
+      SwaggerUIBundle({
+        url: '/api-docs/spec',
+        dom_id: '#swagger-ui',
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+        layout: 'BaseLayout',
+        deepLinking: true,
+        tryItOutEnabled: true
+      });
+    };
+  </script>
+</body>
+</html>`);
+});
 
 // Health check
 app.get("/", (req, res) => {
@@ -39,7 +65,7 @@ app.get("/", (req, res) => {
         status: "online",
         message: "Deepfake Detection API",
         version: "2.0.0",
-        docs: process.env.NODE_ENV !== "production" ? "/docs" : "N/A"
+        docs: "/api-docs"
     });
 });
 

@@ -1,21 +1,19 @@
 import express from "express";
+import cors from "cors";
 import uploadRoutes from "./routes/upload.routes.js";
 import faciaRoutes from "./routes/facia.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import historialRoutes from "./routes/historial.routes.js";
-import swaggerUi from "swagger-ui-express";
-import swaggerSpec from "./config/swagger.js";
-import cors from "cors";
 import analysisRoutes from "./routes/analysis.routes.js";
 
 const app = express();
 
-// ✅ CORS configurado para desarrollo Y producción
+// CORS
 app.use(cors({
     origin: process.env.NODE_ENV === "production"
-        ? process.env.FRONTEND_URL  // Vercel frontend
+        ? process.env.FRONTEND_URL
         : "http://localhost:5173",
-    methods: ["GET", "POST"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
 }));
@@ -23,33 +21,38 @@ app.use(cors({
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Swagger solo en desarrollo
-    app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// Swagger — solo desarrollo local, import dinámico para evitar errores en Vercel
+if (process.env.NODE_ENV !== "production") {
+    try {
+        const swaggerUi = (await import("swagger-ui-express")).default;
+        const swaggerSpec = (await import("./config/swagger.js")).default;
+        app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+        console.log("Swagger disponible en /docs");
+    } catch (e) {
+        console.warn("Swagger no disponible:", e.message);
+    }
+}
 
-// ✅ Ruta de health check (para verificar que el servidor funciona)
+// Health check
 app.get("/", (req, res) => {
     res.json({
         status: "online",
         message: "Deepfake Detection API",
         version: "2.0.0",
-        docs: "/docs"
+        docs: process.env.NODE_ENV !== "production" ? "/docs" : "N/A"
     });
 });
 
-// Rutas principales
+// Rutas
+app.use("/upload", uploadRoutes);
 app.use("/facia", faciaRoutes);
 app.use("/auth", authRoutes);
-app.use("/upload", uploadRoutes);
-app.use("/analysis", analysisRoutes);
 app.use("/historial", historialRoutes);
+app.use("/analysis", analysisRoutes);
 
-// ✅ Manejo de rutas no encontradas
+// 404
 app.use((req, res) => {
-    res.status(404).json({
-        error: "Ruta no encontrada",
-        path: req.path
-    });
+    res.status(404).json({ error: "Ruta no encontrada" });
 });
-
 
 export default app;

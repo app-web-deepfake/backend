@@ -5,7 +5,7 @@ const AnalysisSchema = new mongoose.Schema({
     fileUrl: { type: String, required: true },
     fileName: { type: String, default: null },
     faciaReferenceId: { type: String, default: null },
-    faciaResponse: { type: Object, required: true },
+    faciaResponse: { type: Object, default: null },
     verdict: { type: String, enum: ["REAL", "FAKE", "processing"], default: "processing" },
     isDeepfake: { type: Boolean, default: null },
     confidence: { type: String, default: null },

@@ -1,9 +1,5 @@
 import express from 'express';
-import {
-    startAnalysis,
-    getAnalysisResult,
-    checkAnalysisStatus
-} from '../controllers/analysis.controller.js';
+import { startAnalysis, getAnalysisResult, checkAnalysisStatus } from '../controllers/analysis.controller.js';
 import { optionalAuth } from '../middleware/auth.middleware.js';
 
 const router = express.Router();

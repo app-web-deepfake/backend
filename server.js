@@ -1,22 +1,31 @@
 import "./src/config/env.js";
-import app from './src/app.js';
-import { connectDB } from './src/config/db.js';
-import {fileURLToPath} from "url";
-import path from "path";
-import dotenv from "dotenv";
+import app from "./src/app.js";
+import { connectDB } from "./src/config/db.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+let isConnected = false;
 
-dotenv.config({ path: path.join(__dirname, ".env") });
+/**
+ * Inicializa la conexión a la base de datos una sola vez
+ */
+const initDB = async () => {
+    if (!isConnected) {
+        try {
+            await connectDB();
+            isConnected = true;
+            console.log("✅ Base de datos conectada");
+        } catch (error) {
+            console.error("❌ Error conectando a la DB:", error);
+            throw error;
+        }
+    }
+};
 
-const PORT = process.env.PORT || 4000;
+/**
+ * Handler para Vercel (Serverless Function)
+ */
+export default async function handler(req, res) {
+    await initDB();
 
-connectDB().then(() => {
-    app.listen(PORT, () => {
-        console.log(`Backend corriendo en puerto ${PORT}`);
-        console.log("AWS REGION:", process.env.AWS_REGION);
-        console.log("AWS ACCESS:", process.env.AWS_ACCESS ? "✅ Cargada" : "❌ No cargada");
-        console.log("AWS SECRET:", process.env.AWS_SECRET ? "✅ Cargada" : "❌ No cargada");
-    });
-});
+    // Delega el manejo de rutas a Express
+    return app(req, res);
+}

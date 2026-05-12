@@ -17,31 +17,53 @@ app.use((req, res, next) => {
     helmet()(req, res, next);
 });
 
-// CORS
-app.use(cors({
-    origin: process.env.NODE_ENV === "production"
-        ? process.env.FRONTEND_URL
-        : "http://localhost:5173",
+// CORS — acepta localhost en dev y FRONTEND_URL en prod
+const allowedOrigins = [
+    "http://localhost:5173",
+    process.env.FRONTEND_URL,
+].filter(Boolean);
+
+const corsOptions = {
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, true); // Postman / server-to-server
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            console.warn(`CORS bloqueado: ${origin}`);
+            callback(new Error(`Origen no permitido por CORS: ${origin}`));
+        }
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true
-}));
+    credentials: true,
+    optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // preflight para TODAS las rutas
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting para rutas de autenticación
+// Rate limiting
 const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutos
+    windowMs: 15 * 60 * 1000,
     max: 20,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { success: false, error: "Demasiados intentos. Intenta de nuevo en 15 minutos." }
+    message: {
+        success: false,
+        error: "Demasiados intentos. Intenta de nuevo en 15 minutos.",
+    },
 });
 
-// Documentacion — Swagger UI via CDN (funciona en local y en Vercel)
+// Swagger
 app.get("/api-docs/spec", (req, res) => {
-    res.json(swaggerSpec);
+    try {
+        res.json(swaggerSpec);
+    } catch (e) {
+        res.status(500).json({ error: "No se pudo cargar la spec" });
+    }
 });
 
 app.get("/api-docs", (req, res) => {
@@ -52,10 +74,7 @@ app.get("/api-docs", (req, res) => {
   <title>Deepfake Detection API - Documentacion</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" />
-  <style>
-    body { margin: 0; }
-    .topbar { display: none; }
-  </style>
+  <style>body { margin: 0; } .topbar { display: none; }</style>
 </head>
 <body>
   <div id="swagger-ui"></div>
@@ -82,7 +101,7 @@ app.get("/", (req, res) => {
         status: "online",
         message: "Deepfake Detection API",
         version: "2.0.0",
-        docs: "/api-docs"
+        docs: "/api-docs",
     });
 });
 

@@ -41,7 +41,7 @@ export const register = async (req, res) => {
             success: true,
             token,
             emailVerified: false,
-            user: { id: user._id, name: user.name, email: user.email, role: user.role },
+            user: { id: user._id.toString(), name: user.name, email: user.email, role: user.role },
         });
     } catch (err) {
         console.error("Register error:", err);
@@ -68,7 +68,7 @@ export const login = async (req, res) => {
             success: true,
             token,
             emailVerified: user.emailVerified,
-            user: { id: user._id, name: user.name, email: user.email, role: user.role },
+            user: { id: user._id.toString(), name: user.name, email: user.email, role: user.role },
         });
     } catch (err) {
         console.error("Login error:", err);
@@ -81,7 +81,16 @@ export const getMe = async (req, res) => {
         const user = await User.findById(req.userId).select("-password -emailVerificationToken -resetPasswordToken");
         if (!user)
             return res.status(404).json({ success: false, error: "Usuario no encontrado" });
-        res.json({ success: true, user });
+        res.json({
+            success: true,
+            user: {
+                id: user._id.toString(),
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                emailVerified: user.emailVerified
+            }
+        });
     } catch (err) {
         res.status(500).json({ success: false, error: "Error obteniendo usuario" });
     }
@@ -217,7 +226,7 @@ export const updateProfile = async (req, res) => {
         res.json({
             success: true,
             message: "Perfil actualizado",
-            user: { id: user._id, name: user.name, email: user.email, role: user.role, emailVerified: user.emailVerified },
+            user: { id: user._id.toString(), name: user.name, email: user.email, role: user.role, emailVerified: user.emailVerified },
         });
     } catch (err) {
         console.error("updateProfile error:", err);

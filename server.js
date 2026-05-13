@@ -20,12 +20,19 @@ const initDB = async () => {
     }
 };
 
-/**
- * Handler para Vercel (Serverless Function)
- */
+// ── Local: levantar servidor normal ──────────────────────────────────────────
+if (process.env.NODE_ENV !== "production") {
+    const PORT = process.env.PORT || 4000;
+    initDB().then(() => {
+        app.listen(PORT, () => {
+            console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+            console.log(`📄 Docs en http://localhost:${PORT}/api-docs`);
+        });
+    }).catch(() => process.exit(1));
+}
+
+// ── Vercel: exportar handler serverless ──────────────────────────────────────
 export default async function handler(req, res) {
     await initDB();
-
-    // Delega el manejo de rutas a Express
     return app(req, res);
 }

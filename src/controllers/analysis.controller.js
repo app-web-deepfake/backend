@@ -1,6 +1,7 @@
 import Analysis from "../models/analysis.model.js";
 import { sendToFacia, getFaciaResult } from '../services/facia.service.js';
 import { saveAnalysisRecord } from './historial.controller.js';
+import { analyze as trustAnalyze } from '../trust-analysis/TrustAnalysisEngine.js';
 
 export const startAnalysis = async (req, res) => {
     try {
@@ -12,7 +13,6 @@ export const startAnalysis = async (req, res) => {
 
         const referenceId = await sendToFacia(fileUrl);
 
-        // Guardar en historial inmediatamente al iniciar
         saveAnalysisRecord({
             userId: req.userId || null,
             fileUrl,
@@ -21,15 +21,15 @@ export const startAnalysis = async (req, res) => {
             verdict: "processing",
             isDeepfake: null,
             confidence: null,
-            faciaResponse: null
+            faciaResponse: null,
         }).catch(err => console.error("Error guardando registro inicial:", err));
 
         return res.status(200).json({
             success: true,
             analysisId: referenceId,
-            message: "Archivo enviado a analisis correctamente.",
+            message: "Archivo enviado a análisis correctamente.",
             estimatedTime: "5-30 segundos",
-            status: "processing"
+            status: "processing",
         });
 
     } catch (error) {
@@ -37,7 +37,7 @@ export const startAnalysis = async (req, res) => {
         let errorMessage = "Error interno del servidor";
         let statusCode = 500;
         if (error.message.includes("FailedFacia")) {
-            errorMessage = "No se pudo enviar el archivo a analisis. Por favor, intenta de nuevo.";
+            errorMessage = "No se pudo enviar el archivo a análisis. Por favor, intenta de nuevo.";
             statusCode = 503;
         } else if (error.message.includes("S3")) {
             errorMessage = "No se pudo acceder al archivo. Verifica que se haya subido correctamente.";
@@ -46,7 +46,7 @@ export const startAnalysis = async (req, res) => {
         return res.status(statusCode).json({
             success: false,
             error: errorMessage,
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined,
         });
     }
 };
@@ -66,26 +66,43 @@ export const getAnalysisResult = async (req, res) => {
             return res.status(202).json({
                 success: true,
                 processing: true,
-                message: "El analisis aun esta en proceso.",
-                result: { analysisId: result.reference_id, status: "processing" }
+                message: "El análisis aún está en proceso.",
+                result: { analysisId: result.reference_id, status: "processing" },
             });
         }
 
-        const score = result.deepfake_score;
-        const scoreIndicatesReal = typeof score === 'number' && score < 0.6;
-        const evasionAttackDetected = result.decline_code === "FADR07";
-        const finalIsDeepfake = (result.status === 0) && !scoreIndicatesReal && !evasionAttackDetected;
-        const finalVerdict = finalIsDeepfake ? "FAKE" : "REAL";
+        const score          = result.deepfake_score;
+        const evasionAttack  = result.decline_code === "FADR07";
 
-        // Actualizar el registro existente con el resultado final
+        // Detectar tipo de archivo desde la URL
+        const fileType = /\.(mp4|mov|avi|webm)/i.test(result.client_reference || "")
+            ? "video" : "image";
+
+        // ── TrustAnalysisEngine ──────────────────────────────────────────────
+        const trust = await trustAnalyze({
+            score,
+            evasionAttack,
+            fileType,
+            userId: req.userId || null,
+        });
+        // ────────────────────────────────────────────────────────────────────
+
+        // Persistir resultado enriquecido
         try {
             await Analysis.findOneAndUpdate(
                 { faciaReferenceId: referenceId },
                 {
-                    verdict: finalVerdict,
-                    isDeepfake: finalIsDeepfake,
-                    confidence: typeof score === 'number' ? (score * 100).toFixed(2) : null,
-                    faciaResponse: result
+                    verdict:          trust.verdict,
+                    isDeepfake:       trust.isDeepfake,
+                    confidence:       typeof score === 'number' ? (score * 100).toFixed(2) : null,
+                    faciaResponse:    result,
+                    // TrustAnalysisEngine fields
+                    riskLevel:        trust.riskLevel,
+                    trustScore:       trust.trustScore,
+                    interpretedLabel: trust.interpretedLabel,
+                    explanation:      trust.explanation,
+                    recommendations:  trust.recommendations,
+                    analysisCategory: trust.analysisCategory,
                 }
             );
         } catch (e) {
@@ -96,37 +113,46 @@ export const getAnalysisResult = async (req, res) => {
             success: true,
             processing: false,
             result: {
-                analysisId: result.reference_id,
-                verdict: finalVerdict,
-                timestamp: new Date().toISOString(),
-                type: result.type,
-                status: result.status,
-                isDeepfake: finalIsDeepfake,
-                isAuthentic: !finalIsDeepfake,
-                confidence: typeof score === 'number' ? (score * 100).toFixed(2) : null,
-                deepfake_score: score,
-                decline_code: result.decline_code,
-                decline_reason: result.decline_reason,
-                declined_proof: result.declined_proof,
+                analysisId:       result.reference_id,
+                timestamp:        new Date().toISOString(),
+                type:             result.type,
+                status:           result.status,
+                decline_code:     result.decline_code,
+                decline_reason:   result.decline_reason,
+                declined_proof:   result.declined_proof,
                 client_reference: result.client_reference,
-            }
+                deepfake_score:   score,
+                confidence:       typeof score === 'number' ? (score * 100).toFixed(2) : null,
+
+                // TrustAnalysisEngine
+                verdict:          trust.verdict,
+                isDeepfake:       trust.isDeepfake,
+                isAuthentic:      !trust.isDeepfake,
+                riskLevel:        trust.riskLevel,
+                trustScore:       trust.trustScore,
+                interpretedLabel: trust.interpretedLabel,
+                explanation:      trust.explanation,
+                recommendations:  trust.recommendations,
+                analysisCategory: trust.analysisCategory,
+                recidivism:       trust.recidivism,
+            },
         });
 
     } catch (error) {
         console.error("Error getAnalysisResult:", error);
-        let errorMessage = "Error obteniendo resultado del analisis";
+        let errorMessage = "Error obteniendo resultado del análisis";
         let statusCode = 500;
         if (error.message.includes("FailedFaciaResult")) {
-            errorMessage = "No se pudo obtener el resultado. El ID de referencia puede ser invalido.";
+            errorMessage = "No se pudo obtener el resultado. El ID de referencia puede ser inválido.";
             statusCode = 404;
         } else if (error.message.includes("multiples intentos")) {
-            errorMessage = "El analisis esta tomando mas tiempo del esperado. Intenta de nuevo en unos momentos.";
+            errorMessage = "El análisis está tomando más tiempo del esperado. Intenta de nuevo en unos momentos.";
             statusCode = 408;
         }
         return res.status(statusCode).json({
             success: false,
             error: errorMessage,
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined,
         });
     }
 };
@@ -138,32 +164,45 @@ export const checkAnalysisStatus = async (req, res) => {
             return res.status(400).json({ success: false, error: "referenceId requerido" });
         }
 
-        const result = await getFaciaResult(referenceId, 1, 0);
+        const result     = await getFaciaResult(referenceId, 1, 0);
         const isComplete = result.status !== null && result.deepfake_score !== null;
 
         let computed = null;
         if (isComplete) {
-            const score = result.deepfake_score;
-            const scoreIndicatesReal = typeof score === 'number' && score < 0.6;
-            const evasionAttackDetected = result.decline_code === "FADR07";
-            const finalIsDeepfake = (result.status === 0) && !scoreIndicatesReal && !evasionAttackDetected;
+            const score         = result.deepfake_score;
+            const evasionAttack = result.decline_code === "FADR07";
+            const fileType      = /\.(mp4|mov|avi|webm)/i.test(result.client_reference || "")
+                ? "video" : "image";
+
+            const trust = await trustAnalyze({
+                score,
+                evasionAttack,
+                fileType,
+                userId: req.userId || null,
+            });
+
             computed = {
-                isDeepfake: finalIsDeepfake,
-                confidence: typeof score === 'number' ? (score * 100).toFixed(2) : null,
-                verdict: finalIsDeepfake ? "FAKE" : "REAL"
+                verdict:          trust.verdict,
+                isDeepfake:       trust.isDeepfake,
+                confidence:       typeof score === 'number' ? (score * 100).toFixed(2) : null,
+                riskLevel:        trust.riskLevel,
+                trustScore:       trust.trustScore,
+                interpretedLabel: trust.interpretedLabel,
+                explanation:      trust.explanation,
+                recommendations:  trust.recommendations,
             };
         }
 
         return res.status(200).json({
-            success: true,
-            analysisId: referenceId,
-            status: isComplete ? "completed" : "processing",
+            success:     true,
+            analysisId:  referenceId,
+            status:      isComplete ? "completed" : "processing",
             isComplete,
-            result: computed
+            result:      computed,
         });
 
     } catch (error) {
         console.error("Error checkAnalysisStatus:", error);
-        return res.status(500).json({ success: false, error: "Error verificando estado del analisis" });
+        return res.status(500).json({ success: false, error: "Error verificando estado del análisis" });
     }
 };

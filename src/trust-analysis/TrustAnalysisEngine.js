@@ -140,14 +140,15 @@ async function detectRecidivism(userId) {
  * @param {string}  params.fileType       - "image" | "video"
  * @param {string}  [params.userId]       - para detección de reincidencia
  */
-export async function analyze({ score, evasionAttack = false, fileType = "image", userId = null }) {
+export async function analyze({ score, evasionAttack = false, fileType = "image", userId = null, faciaStatus = null }) {
     const riskLevel       = classifyRisk(score);
     const trustScore      = computeTrustScore(score);
     const interpretedLabel = getInterpretedLabel(riskLevel, evasionAttack);
     const explanation     = getExplanation(score, riskLevel, evasionAttack, fileType);
     const recommendations = getRecommendations(riskLevel, evasionAttack);
     const recidivism      = await detectRecidivism(userId);
-    const isDeepfake      = riskLevel === "HIGH" || riskLevel === "CRITICAL";
+    const isDeepfake = (riskLevel === "HIGH" || riskLevel === "CRITICAL")
+                                && (faciaStatus === null || faciaStatus === 0);
     const verdict         = isDeepfake ? "FAKE" : "REAL";
     const analysisCategory = evasionAttack ? "evasion" : "deepfake";
 

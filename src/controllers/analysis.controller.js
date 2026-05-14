@@ -84,6 +84,7 @@ export const getAnalysisResult = async (req, res) => {
             evasionAttack,
             fileType,
             userId: req.userId || null,
+            faciaStatus: result.status
         });
         // ────────────────────────────────────────────────────────────────────
 

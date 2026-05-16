@@ -53,7 +53,7 @@ export const deleteAllAnalysis = async (req, res) => {
     }
 };
 
-export const saveAnalysisRecord = async ({ userId, fileUrl, fileName, faciaReferenceId, verdict, isDeepfake, confidence, faciaResponse }) => {
+export const saveAnalysisRecord = async ({ userId, fileUrl, fileName, faciaReferenceId, verdict, isDeepfake, confidence, faciaResponse, fileHash }) => {
     try {
         const record = new Analysis({
             userId: userId || null,
@@ -64,6 +64,7 @@ export const saveAnalysisRecord = async ({ userId, fileUrl, fileName, faciaRefer
             isDeepfake: isDeepfake ?? null,
             confidence: confidence || null,
             faciaResponse: faciaResponse || null,
+            fileHash: fileHash || null,  // ← esta línea faltaba
         });
         await record.save();
         return record;

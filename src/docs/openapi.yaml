@@ -1,27 +1,23 @@
 openapi: 3.1.0
 info:
   title: Deepfake Detection API
-  version: 1.0.0
+  version: 2.0.0
   description: |
-    API para detección de deepfakes en imágenes y videos usando Facia AI.
-    
+    API para detección de deepfakes en imágenes y videos usando **ZeroTrue AI**.
+
     ## Flujo de uso
-    
-    1. **Solicitar URL de subida** - `POST /api/files/upload-url`
-    2. **Subir archivo a S3** - Usar la URL presignada desde el frontend
-    3. **Iniciar análisis** - `POST /api/analysis/start`
-    4. **Consultar resultado** - `POST /api/analysis/result`
-    5. **Verificar estado** (opcional) - `GET /api/analysis/status/:id`
-    
+
+    1. **Solicitar URL de subida** → `POST /upload/upload-url`
+    2. **Subir archivo a S3** → desde el frontend usando la URL presignada
+    3. **Iniciar análisis** → `POST /analysis/start` (devuelve resultado completo)
+    4. **Consultar historial** → `GET /historial` (opcional)
+
     ## Tipos de archivo soportados
-    
+
     - **Imágenes:** PNG, JPG, JPEG (máx 50MB)
     - **Videos:** MP4, MOV, WEBM (máx 500MB)
-    
-    ## Tiempos de procesamiento
-    
-    - Imágenes: 2-10 segundos
-    - Videos: 5-30 segundos
+
+    > Los umbrales de video son más estrictos (HIGH desde 0.60).
 
   contact:
     name: API Support
@@ -39,35 +35,34 @@ tags:
   - name: Files
     description: Gestión de archivos y subida a S3
   - name: Analysis
-    description: Análisis de deepfake con Facia AI
+    description: Análisis de deepfake con ZeroTrue + TrustAnalysisEngine v4
   - name: Auth
     description: Autenticación y gestión de usuarios
   - name: Historial
     description: Historial de análisis del usuario
-  - name: Facia (Proxy)
-    description: Proxy autenticado hacia la API de Facia AI
 
 paths:
 
   #####################################
-  ## POST /upload-url
+  ## POST /upload/upload-url
   #####################################
   /upload/upload-url:
     post:
       tags:
         - Files
-      summary: Generar URL presignada para subir archivo
+      summary: Generar URL presignada para subir archivo a S3
       description: |
-        Genera credenciales temporales para subir un archivo directamente a S3 
+        Genera credenciales temporales para subir un archivo directamente a S3
         desde el frontend, sin pasar por el servidor backend.
-        
+
         **Seguridad:**
         - URL válida por 1 hora
-        - Tamaño máximo: 5GB
+        - Tamaño máximo configurado: 5GB
         - Solo archivos de imagen o video
-        
+
         **Siguiente paso:**
-        Usar `uploadUrl` y `fields` para hacer un POST multipart desde el frontend.
+        Usar `uploadUrl` y `fields` para hacer un `POST multipart/form-data`
+        desde el frontend directamente a S3.
 
       operationId: generateUploadUrl
       security:
@@ -78,6 +73,9 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - fileName
+                - fileType
               properties:
                 fileName:
                   type: string
@@ -96,9 +94,6 @@ paths:
                     - video/mp4
                     - video/quicktime
                     - video/webm
-              required:
-                - fileName
-                - fileType
             examples:
               video:
                 value:
@@ -108,7 +103,6 @@ paths:
                 value:
                   fileName: "foto-perfil.jpg"
                   fileType: "image/jpeg"
-
       responses:
         "200":
           description: URL presignada generada exitosamente
@@ -124,12 +118,11 @@ paths:
                       bucket: "deepfake-detector-files"
                       key: "1763532656440_video-prueba.mp4"
                       X-Amz-Algorithm: "AWS4-HMAC-SHA256"
-                      X-Amz-Credential: "AKIAVZXYWLVGWQ5UBY5C/20251119/us-east-1/s3/aws4_request"
-                      X-Amz-Date: "20251119T040145Z"
+                      X-Amz-Credential: "AKIAVZXYWLVGWQ5UBY5C/20260518/us-east-1/s3/aws4_request"
+                      X-Amz-Date: "20260518T005558Z"
                       Policy: "eyJleHBpcmF0aW9uIjoi..."
                       X-Amz-Signature: "d1e5219137f9969c..."
                     fileUrl: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/1763532656440_video-prueba.mp4"
-
         "400":
           description: Parámetros inválidos o faltantes
           content:
@@ -145,7 +138,12 @@ paths:
                   value:
                     success: false
                     error: "Tipo de archivo no soportado. Use imagen (png, jpg) o video (mp4, webm)"
-
+        "401":
+          description: Token JWT requerido o inválido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Error del servidor
           content:
@@ -160,21 +158,29 @@ paths:
     post:
       tags:
         - Analysis
-      summary: Iniciar análisis de deepfake
+      summary: Iniciar análisis de deepfake (resultado inmediato)
       description: |
-        Inicia el análisis de un archivo que ya fue subido a S3.
-        
-        **Proceso:**
-        1. Descarga el archivo de S3
-        2. Lo envía a Facia AI para análisis
-        3. Retorna un ID de referencia para consultar el resultado
-        
-        **Tiempo estimado:**
-        - Imágenes: 2-10 segundos
-        - Videos: 5-30 segundos
-        
-        **Siguiente paso:**
-        Usar el `referenceId` retornado para consultar el resultado en `/api/analysis/result`
+        Inicia y completa el análisis de un archivo subido a S3.
+
+        **Comportamiento v2 (ZeroTrue):**
+        - El backend descarga el archivo de S3
+        - Lo envía a ZeroTrue y hace polling interno hasta que el análisis esté listo
+        - Devuelve el resultado **completo en una sola respuesta** (no necesitas hacer polling)
+
+        **El resultado incluye:**
+        - `verdict`: FAKE | REAL
+        - `riskLevel`: LOW | MEDIUM | SUSPICIOUS | HIGH | CRITICAL
+        - `interpretedLabel`: texto interpretable para mostrar al usuario
+        - `explanation`: explicación en lenguaje natural
+        - `recommendations`: lista de recomendaciones
+        - `trustScore`: puntaje de confianza (0–100, donde 100 = completamente auténtico)
+        - `manipulationIndex`: índice de manipulación en % (0–100)
+        - `isSuspicious`: true si el score cae en la zona gris (0.45–0.65)
+        - `hasFace`: true si se detectó un rostro humano
+
+        **Caché automático:**
+        Si el mismo archivo fue analizado antes (mismo hash), devuelve el resultado
+        cacheado instantáneamente con `fromCache: true`.
 
       operationId: startAnalysis
       security:
@@ -185,42 +191,171 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - fileUrl
               properties:
                 fileUrl:
                   type: string
                   format: uri
-                  description: URL completa del archivo en S3 (obtenida de /api/files/upload-url)
+                  description: URL completa del archivo en S3 (obtenida de /upload/upload-url)
                   example: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/1763532656440_video.mp4"
-              required:
-                - fileUrl
+                fileName:
+                  type: string
+                  description: Nombre original del archivo (opcional, para historial)
+                  example: "video-sospechoso.mp4"
             examples:
+              image:
+                value:
+                  fileUrl: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/1779065758191_foto.jpg"
+                  fileName: "foto.jpg"
               video:
                 value:
                   fileUrl: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/1763532656440_video.mp4"
-
+                  fileName: "video-sospechoso.mp4"
       responses:
         "200":
-          description: Análisis iniciado correctamente
+          description: Análisis completado correctamente
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AnalysisStartResponse"
+                $ref: "#/components/schemas/AnalysisCompleteResponse"
               examples:
-                success:
+                deepfakeDetectado:
+                  summary: Deepfake detectado
                   value:
                     success: true
-                    referenceId: "29D027498EE8EBB"
-                    message: "Archivo enviado a análisis correctamente. El procesamiento puede tomar unos segundos."
-                    estimatedTime: "5-30 segundos"
-                    status: "processing"
-
+                    analysisId: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
+                    fromCache: false
+                    status: "completed"
+                    processing: false
+                    message: "Análisis completado correctamente."
+                    result:
+                      analysisId: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
+                      timestamp: "2026-05-18T00:55:58Z"
+                      mediaType: "image"
+                      deepfake_score: 0.87
+                      hasFace: true
+                      verdict: "FAKE"
+                      isDeepfake: true
+                      isAuthentic: false
+                      isInconclusive: false
+                      isGreyZone: false
+                      isSuspicious: false
+                      invalidCase: null
+                      riskLevel: "CRITICAL"
+                      trustScore: 13
+                      manipulationIndex: 87
+                      interpretedLabel: "Deepfake confirmado"
+                      explanation: "Esta imagen presenta un índice de manipulación del 87%, lo que indica con alta certeza que el contenido fue generado o manipulado digitalmente mediante inteligencia artificial."
+                      recommendations:
+                        - "No compartas este contenido bajo ninguna circunstancia sin verificarlo."
+                        - "Reporta el contenido si fue recibido por canales no confiables."
+                        - "Consulta con un experto en análisis forense digital."
+                        - "Este material no debe usarse como evidencia o referencia."
+                      analysisCategory: "deepfake"
+                      recidivism:
+                        isRecidivist: false
+                        count: 0
+                        message: null
+                contenidoAutentico:
+                  summary: Contenido auténtico
+                  value:
+                    success: true
+                    analysisId: "3a1b2c88-1f2e-5c6d-8af3-2b3c4d5e6f7a"
+                    fromCache: false
+                    status: "completed"
+                    processing: false
+                    message: "Análisis completado correctamente."
+                    result:
+                      analysisId: "3a1b2c88-1f2e-5c6d-8af3-2b3c4d5e6f7a"
+                      timestamp: "2026-05-18T01:00:00Z"
+                      mediaType: "image"
+                      deepfake_score: 0.12
+                      hasFace: true
+                      verdict: "REAL"
+                      isDeepfake: false
+                      isAuthentic: true
+                      isInconclusive: false
+                      isGreyZone: false
+                      isSuspicious: false
+                      invalidCase: null
+                      riskLevel: "LOW"
+                      trustScore: 88
+                      manipulationIndex: 12
+                      interpretedLabel: "Contenido auténtico"
+                      explanation: "Esta imagen presenta un índice de manipulación del 12%, dentro del rango normal. El contenido aparenta ser auténtico."
+                      recommendations:
+                        - "El contenido parece auténtico, pero mantén buenas prácticas de verificación."
+                        - "Considera la fuente original antes de compartir."
+                      analysisCategory: "deepfake"
+                      recidivism:
+                        isRecidivist: false
+                        count: 0
+                        message: null
+                zonaSospechosa:
+                  summary: Zona SUSPICIOUS (no concluyente)
+                  value:
+                    success: true
+                    analysisId: "5b2c3d99-2g3f-6d7e-9bg4-3c4d5e6f7g8b"
+                    fromCache: false
+                    status: "completed"
+                    processing: false
+                    message: "Análisis completado correctamente."
+                    result:
+                      analysisId: "5b2c3d99-2g3f-6d7e-9bg4-3c4d5e6f7g8b"
+                      mediaType: "image"
+                      deepfake_score: 0.55
+                      hasFace: true
+                      verdict: "REAL"
+                      isDeepfake: false
+                      isAuthentic: true
+                      isInconclusive: true
+                      isGreyZone: false
+                      isSuspicious: true
+                      riskLevel: "SUSPICIOUS"
+                      trustScore: 45
+                      manipulationIndex: 55
+                      interpretedLabel: "Resultado sospechoso — no concluyente"
+                      explanation: "Esta imagen presenta un índice de manipulación del 55%, en la zona gris entre contenido auténtico y manipulado. Puede deberse a filtros, compresión agresiva de plataformas como WhatsApp o TikTok, o ediciones menores."
+                      recommendations:
+                        - "El resultado no es concluyente — no confirma ni descarta manipulación."
+                        - "Verifica si el contenido proviene de una fuente conocida y confiable."
+                        - "Imágenes con filtros, stickers o capturadas de pantalla pueden dar este resultado."
+                      analysisCategory: "uncertain"
+                desdeCache:
+                  summary: Resultado desde caché
+                  value:
+                    success: true
+                    analysisId: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
+                    fromCache: true
+                    status: "completed"
+                    message: "Resultado obtenido del caché (archivo ya analizado anteriormente)."
+                    result:
+                      analysisId: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
+                      verdict: "FAKE"
+                      isDeepfake: true
+                      riskLevel: "CRITICAL"
+                      trustScore: 13
+                      manipulationIndex: 87
+                      interpretedLabel: "Deepfake confirmado"
+                      processing: false
         "400":
-          description: URL del archivo no proporcionada
+          description: fileUrl no proporcionada
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
+              examples:
+                missingUrl:
+                  value:
+                    success: false
+                    error: "fileUrl requerido"
+        "401":
+          description: Token JWT requerido o inválido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Archivo no encontrado en S3
           content:
@@ -231,26 +366,50 @@ paths:
                 notFound:
                   value:
                     success: false
-                    error: "No se pudo acceder al archivo. Verifica que se haya subido correctamente."
-
+                    error: "No se pudo acceder al archivo."
+        "422":
+          description: Archivo incompatible o dañado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                incompatible:
+                  value:
+                    success: false
+                    error: "El archivo no es compatible para análisis."
+        "429":
+          description: Límite de análisis alcanzado (ZeroTrue rate limit)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                rateLimit:
+                  value:
+                    success: false
+                    error: "Límite de análisis alcanzado. Intenta en unos minutos."
         "500":
           description: Error interno del servidor
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
         "503":
-          description: Servicio de Facia no disponible
+          description: Servicio de ZeroTrue no disponible o API Key no configurada
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
               examples:
-                serviceUnavailable:
+                noApiKey:
                   value:
                     success: false
-                    error: "No se pudo enviar el archivo a análisis. Por favor, intenta de nuevo."
+                    error: "Servicio de análisis no configurado."
+                authError:
+                  value:
+                    success: false
+                    error: "Error de autenticación con el servicio de análisis."
 
   #####################################
   ## POST /analysis/result
@@ -259,24 +418,14 @@ paths:
     post:
       tags:
         - Analysis
-      summary: Obtener resultado del análisis
+      summary: Obtener resultado guardado por analysisId (desde MongoDB)
       description: |
-        Consulta el resultado del análisis usando el ID obtenido en `/api/analysis/start`.
-        
-        **Comportamiento con reintentos automáticos:**
-        - Reintenta hasta 10 veces si el resultado no está listo
-        - Espera 3 segundos entre cada intento
-        - Tiempo máximo de espera: ~30 segundos
-        
-        **Estados del resultado:**
-        - `status: 0` → **Deepfake detectado** (contenido falso)
-        - `status: 1` → **Contenido auténtico** (no es deepfake)
-        - `status: null` → Aún procesando
-        
-        **Confianza del resultado:**
-        - `0-30%` → Muy probablemente auténtico
-        - `30-70%` → Zona gris (revisar manualmente)
-        - `70-100%` → Muy probablemente deepfake
+        Consulta el resultado de un análisis previo usando el `analysisId`
+        retornado por `/analysis/start`.
+
+        En v2, como el análisis se completa en `/analysis/start`, este endpoint
+        sirve principalmente para **recuperar resultados ya guardados** en MongoDB,
+        útil si el frontend perdió la respuesta original.
 
       operationId: getAnalysisResult
       security:
@@ -287,89 +436,38 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - referenceId
               properties:
                 referenceId:
                   type: string
-                  description: ID del análisis (obtenido de /analysis/start)
-                  example: "29D027498EE8EBB"
-              required:
-                - referenceId
+                  description: ID del análisis (obtenido de /analysis/start como analysisId)
+                  example: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
             examples:
               request:
                 value:
-                  referenceId: "29D027498EE8EBB"
-
+                  referenceId: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
       responses:
         "200":
-          description: Resultado completo obtenido
+          description: Resultado completo obtenido desde MongoDB
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AnalysisResultComplete"
-              examples:
-                deepfakeDetected:
-                  summary: Deepfake detectado
-                  value:
-                    success: true
-                    processing: false
-                    result:
-                      referenceId: "29D027498EE8EBB"
-                      type: "deepfake"
-                      status: 0
-                      isDeepfake: true
-                      isAuthentic: false
-                      confidence: "87.32"
-                      verdict: "FAKE"
-                      deepfake_score: 0.8732
-                      decline_code: "FADR07"
-                      decline_reason: "Evasion attack detected."
-                      declined_proof: "https://api.facia.ai/api/image-url/691d5beca320adf85120e159"
-                      timestamp: "2025-11-19T04:01:45Z"
-
-                authenticContent:
-                  summary: Contenido auténtico
-                  value:
-                    success: true
-                    processing: false
-                    result:
-                      referenceId: "A9B123XYZ456"
-                      type: "deepfake"
-                      status: 1
-                      isDeepfake: false
-                      isAuthentic: true
-                      confidence: "12.45"
-                      verdict: "REAL"
-                      deepfake_score: 0.1245
-                      decline_code: null
-                      decline_reason: null
-                      declined_proof: null
-                      timestamp: "2025-11-19T04:02:30Z"
-
+                $ref: "#/components/schemas/AnalysisCompleteResponse"
         "202":
-          description: Análisis aún en proceso
+          description: Análisis aún en proceso (estado transitorio)
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AnalysisResultProcessing"
-              examples:
-                processing:
-                  value:
-                    success: true
-                    processing: true
-                    message: "El análisis aún está en proceso. Por favor, vuelve a consultar en unos segundos."
-                    result:
-                      referenceId: "29D027498EE8EBB"
-                      status: "processing"
-
+                $ref: "#/components/schemas/AnalysisProcessingResponse"
         "400":
-          description: ID de análisis no proporcionado
+          description: referenceId no proporcionado
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
         "404":
-          description: ID de análisis no encontrado
+          description: ID de análisis no encontrado en MongoDB
           content:
             application/json:
               schema:
@@ -378,20 +476,7 @@ paths:
                 notFound:
                   value:
                     success: false
-                    error: "No se pudo obtener el resultado. El ID de análisis puede ser inválido."
-
-        "408":
-          description: Timeout - Procesamiento demorado
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              examples:
-                timeout:
-                  value:
-                    success: false
-                    error: "El análisis está tomando más tiempo del esperado. Por favor, intenta de nuevo en unos momentos."
-
+                    error: "Análisis no encontrado"
         "500":
           description: Error obteniendo resultado
           content:
@@ -408,29 +493,11 @@ paths:
         - Analysis
       summary: Verificar estado del análisis (lightweight)
       description: |
-        Endpoint ligero para verificar rápidamente si el análisis está completo.
-        
-        **Ideal para polling desde el frontend:**
-        ```javascript
-        // Ejemplo de polling cada 2 segundos
-        const checkStatus = async (referenceId) => {
-          const response = await fetch(`/api/analysis/status/${referenceId}`);
-          const data = await response.json();
-        
-          if (data.isComplete) {
-            // Obtener resultado completo
-            getFullResult(referenceId);
-          } else {
-            // Esperar 2s y reintentar
-            setTimeout(() => checkStatus(referenceId), 2000);
-          }
-        };
-        ```
-        
-        **Características:**
-        - Sin reintentos automáticos (responde inmediatamente)
-        - Payload mínimo (solo estado básico)
-        - Baja latencia (~50-100ms)
+        Endpoint ligero para verificar si un análisis está completo.
+        Consulta directamente en MongoDB — no contacta a ZeroTrue.
+
+        Útil si el frontend quiere verificar el estado de un análisis
+        iniciado en una sesión anterior.
 
       operationId: checkAnalysisStatus
       security:
@@ -439,11 +506,10 @@ paths:
         - name: referenceId
           in: path
           required: true
-          description: ID del análisis
+          description: ID del análisis (analysisId de /analysis/start)
           schema:
             type: string
-          example: "29D027498EE8EBB"
-
+          example: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
       responses:
         "200":
           description: Estado obtenido exitosamente
@@ -452,41 +518,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/StatusCheckResponse"
               examples:
-                completed:
+                completado:
                   summary: Análisis completado
                   value:
                     success: true
-                    referenceId: "29D027498EE8EBB"
+                    analysisId: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
                     status: "completed"
                     isComplete: true
                     result:
                       isDeepfake: true
-                      confidence: "87.32"
+                      isInconclusive: false
+                      isSuspicious: false
+                      manipulationIndex: 87
+                      riskLevel: "CRITICAL"
+                      trustScore: 13
                       verdict: "FAKE"
-
-                processing:
+                      interpretedLabel: "Deepfake confirmado"
+                procesando:
                   summary: Aún procesando
                   value:
                     success: true
-                    referenceId: "29D027498EE8EBB"
+                    analysisId: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
                     status: "processing"
                     isComplete: false
                     result: null
-
         "400":
-          description: ID inválido
+          description: referenceId inválido
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
-        "404":
-          description: ID no encontrado
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
         "500":
           description: Error verificando estado
           content:
@@ -617,59 +678,6 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   #####################################
-  ## POST /auth/token
-  #####################################
-  /auth/token:
-    post:
-      tags:
-        - Auth
-      summary: Obtener token de Facia AI (proxy autenticado)
-      description: |
-        Proxy autenticado para obtener un token de acceso de Facia AI.
-        Requiere JWT válido del usuario. Las credenciales de Facia se pasan en el body.
-      operationId: getFaciaToken
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                client_id:
-                  type: string
-                  description: Client ID de Facia AI
-                client_secret:
-                  type: string
-                  description: Client Secret de Facia AI
-      responses:
-        "200":
-          description: Token de Facia AI obtenido
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  access_token:
-                    type: string
-        "401":
-          description: Token JWT requerido
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
-          description: Error al contactar Facia AI
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  #####################################
   ## GET /historial
   #####################################
   /historial:
@@ -716,111 +724,6 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Error interno
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  #####################################
-  ## POST /facia/liveness
-  #####################################
-  /facia/liveness:
-    post:
-      tags:
-        - Facia (Proxy)
-      summary: Crear transacción de liveness en Facia AI
-      description: |
-        Proxy autenticado que reenvía la solicitud de liveness a Facia AI.
-        Requiere un token de Facia AI activo (obtenido en `/auth/token`).
-      operationId: createLiveness
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - fileUrl
-                - token
-              properties:
-                fileUrl:
-                  type: string
-                  format: uri
-                  description: URL del archivo en S3
-                  example: "https://deepfake-detector-files.s3.amazonaws.com/video.mp4"
-                token:
-                  type: string
-                  description: Token de acceso de Facia AI
-                  example: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
-      responses:
-        "200":
-          description: Transacción creada en Facia AI
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  reference_id:
-                    type: string
-                    example: "29D027498EE8EBB"
-        "400":
-          description: Error al crear transacción
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Token JWT requerido
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  #####################################
-  ## POST /facia/result
-  #####################################
-  /facia/result:
-    post:
-      tags:
-        - Facia (Proxy)
-      summary: Obtener resultado de liveness de Facia AI
-      description: Proxy autenticado para consultar el resultado de una transacción de liveness.
-      operationId: getLivenessResult
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - reference_id
-                - token
-              properties:
-                reference_id:
-                  type: string
-                  example: "29D027498EE8EBB"
-                token:
-                  type: string
-                  example: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
-      responses:
-        "200":
-          description: Resultado de Facia AI
-          content:
-            application/json:
-              schema:
-                type: object
-        "400":
-          description: Error al obtener resultado
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Token JWT requerido
           content:
             application/json:
               schema:
@@ -917,6 +820,311 @@ components:
               example: "user"
 
     #################################
+    # Files Schemas
+    #################################
+    UploadUrlResponse:
+      type: object
+      required:
+        - uploadUrl
+        - fields
+        - fileUrl
+      properties:
+        uploadUrl:
+          type: string
+          format: uri
+          description: URL base para subir el archivo (POST multipart/form-data)
+          example: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/"
+        fields:
+          type: object
+          description: Campos que deben incluirse en el POST multipart
+          properties:
+            bucket:
+              type: string
+              example: "deepfake-detector-files"
+            key:
+              type: string
+              example: "1779065758191_foto.jpg"
+            X-Amz-Algorithm:
+              type: string
+              example: "AWS4-HMAC-SHA256"
+            X-Amz-Credential:
+              type: string
+              example: "AKIAVZXYWLVGWQ5UBY5C/20260518/us-east-1/s3/aws4_request"
+            X-Amz-Date:
+              type: string
+              example: "20260518T005558Z"
+            Policy:
+              type: string
+              example: "eyJleHBpcmF0aW9uIjoiMjAyNi0wNS0xOFQwMTo1NTo1OFoiLC..."
+            X-Amz-Signature:
+              type: string
+              example: "8a1cb0d182e4e335bf3ea44e90e188f806864b17..."
+        fileUrl:
+          type: string
+          format: uri
+          description: URL completa del archivo — usar en /analysis/start
+          example: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/1779065758191_foto.jpg"
+
+    #################################
+    # Analysis Schemas
+    #################################
+
+    AnalysisResult:
+      type: object
+      description: Resultado completo del análisis deepfake con TrustAnalysisEngine v4
+      properties:
+        analysisId:
+          type: string
+          description: ID único del análisis (generado por ZeroTrue)
+          example: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
+        timestamp:
+          type: string
+          format: date-time
+          description: Fecha y hora del análisis
+          example: "2026-05-18T00:55:58Z"
+        mediaType:
+          type: string
+          enum: [image, video]
+          description: Tipo de media analizado
+          example: "image"
+        deepfake_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Score crudo de deepfake (0 = real, 1 = fake)
+          example: 0.87
+        hasFace:
+          type: boolean
+          description: |
+            true si se detectó un rostro humano.
+            false indica contenido sin personas (animales, paisajes, arte IA).
+          example: true
+        verdict:
+          type: string
+          enum: [FAKE, REAL]
+          description: Veredicto final del análisis
+          example: "FAKE"
+        isDeepfake:
+          type: boolean
+          description: true si el contenido es detectado como deepfake
+          example: true
+        isAuthentic:
+          type: boolean
+          description: true si el contenido es auténtico
+          example: false
+        isInconclusive:
+          type: boolean
+          description: true si el resultado no es concluyente (zona gris o SUSPICIOUS)
+          example: false
+        isGreyZone:
+          type: boolean
+          description: true si el score cae en la zona gris de HIGH (0.65–0.72)
+          example: false
+        isSuspicious:
+          type: boolean
+          description: |
+            true si el score está en la zona SUSPICIOUS (imagen: 0.45–0.65, video: 0.45–0.60).
+            Indica resultado no concluyente por posible compresión, filtros, o edición menor.
+          example: false
+        invalidCase:
+          type: object
+          nullable: true
+          description: Si no null, indica por qué el análisis no fue válido
+          properties:
+            isInvalid:
+              type: boolean
+            code:
+              type: string
+              example: "FADR01"
+            reason:
+              type: string
+              example: "No se detectó un rostro humano en el contenido."
+        riskLevel:
+          type: string
+          enum: [LOW, MEDIUM, SUSPICIOUS, HIGH, CRITICAL]
+          description: |
+            Nivel de riesgo clasificado por TrustAnalysisEngine v4.
+            - LOW: score ≤ 0.30 (imagen) o ≤ 0.25 (video)
+            - MEDIUM: score ≤ 0.45
+            - SUSPICIOUS: score entre 0.45–0.65 (imagen) o 0.45–0.60 (video) — zona no concluyente
+            - HIGH: score ≤ 0.80 (imagen) o ≤ 0.75 (video)
+            - CRITICAL: score > 0.80 (imagen) o > 0.75 (video)
+          example: "CRITICAL"
+        trustScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Puntaje de confianza en autenticidad (100 = completamente auténtico, 0 = deepfake confirmado)
+          example: 13
+        manipulationIndex:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Índice de manipulación en % (0 = real, 100 = deepfake)
+          example: 87
+        interpretedLabel:
+          type: string
+          description: Etiqueta interpretable para mostrar en la UI
+          example: "Deepfake confirmado"
+        explanation:
+          type: string
+          description: Explicación en lenguaje natural para usuarios no técnicos
+          example: "Esta imagen presenta un índice de manipulación del 87%..."
+        recommendations:
+          type: array
+          description: Lista de recomendaciones para el usuario
+          items:
+            type: string
+          example:
+            - "No compartas este contenido bajo ninguna circunstancia sin verificarlo."
+            - "Reporta el contenido si fue recibido por canales no confiables."
+        analysisCategory:
+          type: string
+          enum: [deepfake, ai-generated, evasion, invalid, uncertain]
+          description: |
+            Categoría del análisis:
+            - deepfake: contenido con rostro humano manipulado
+            - ai-generated: contenido sin rostro generado por IA
+            - evasion: intento de evadir la detección
+            - invalid: análisis no pudo completarse
+            - uncertain: zona SUSPICIOUS o grey zone
+          example: "deepfake"
+        recidivism:
+          type: object
+          description: Información de reincidencia del usuario (últimos 30 días)
+          properties:
+            isRecidivist:
+              type: boolean
+              description: true si el usuario tiene 3+ análisis HIGH/CRITICAL en 30 días
+              example: false
+            count:
+              type: integer
+              description: Número de análisis HIGH/CRITICAL en los últimos 30 días
+              example: 0
+            message:
+              type: string
+              nullable: true
+              example: null
+        processing:
+          type: boolean
+          description: Siempre false en respuestas completas
+          example: false
+
+    AnalysisCompleteResponse:
+      type: object
+      required:
+        - success
+        - analysisId
+        - fromCache
+        - status
+        - processing
+        - result
+      properties:
+        success:
+          type: boolean
+          example: true
+        analysisId:
+          type: string
+          description: ID del análisis (mismo que result.analysisId)
+          example: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
+        fromCache:
+          type: boolean
+          description: true si el resultado proviene del caché (archivo ya analizado)
+          example: false
+        status:
+          type: string
+          enum: [completed]
+          example: "completed"
+        processing:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "Análisis completado correctamente."
+        result:
+          $ref: "#/components/schemas/AnalysisResult"
+
+    AnalysisProcessingResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        processing:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "El análisis aún está en proceso."
+        result:
+          type: object
+          properties:
+            analysisId:
+              type: string
+              example: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
+            status:
+              type: string
+              enum: [processing]
+              example: "processing"
+
+    StatusCheckResponse:
+      type: object
+      required:
+        - success
+        - analysisId
+        - status
+        - isComplete
+      properties:
+        success:
+          type: boolean
+          example: true
+        analysisId:
+          type: string
+          example: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
+        status:
+          type: string
+          enum: [processing, completed]
+          example: "completed"
+        isComplete:
+          type: boolean
+          example: true
+        result:
+          type: object
+          nullable: true
+          description: Resultado resumido (solo si isComplete es true)
+          properties:
+            isDeepfake:
+              type: boolean
+              example: true
+            isInconclusive:
+              type: boolean
+              example: false
+            isSuspicious:
+              type: boolean
+              example: false
+            manipulationIndex:
+              type: integer
+              example: 87
+            riskLevel:
+              type: string
+              enum: [LOW, MEDIUM, SUSPICIOUS, HIGH, CRITICAL]
+              example: "CRITICAL"
+            trustScore:
+              type: integer
+              example: 13
+            verdict:
+              type: string
+              enum: [FAKE, REAL]
+              example: "FAKE"
+            interpretedLabel:
+              type: string
+              example: "Deepfake confirmado"
+            explanation:
+              type: string
+              example: "Esta imagen presenta un índice de manipulación del 87%..."
+
+    #################################
     # Historial Schemas
     #################################
     HistorialResponse:
@@ -942,268 +1150,45 @@ components:
               _id:
                 type: string
                 example: "6476a2b1c3d4e5f6a7b8c9d0"
-              referenceId:
+              faciaReferenceId:
                 type: string
-                example: "29D027498EE8EBB"
+                description: ID del análisis (ahora es el ID de ZeroTrue)
+                example: "9f4b2c88-0e1e-4b5c-9af2-1a2b3c4d5e6f"
               isDeepfake:
                 type: boolean
                 example: true
               confidence:
                 type: string
-                example: "87.32"
+                description: Nivel de confianza en % (string para precisión)
+                example: "87.00"
+              manipulationIndex:
+                type: integer
+                example: 87
+              riskLevel:
+                type: string
+                enum: [LOW, MEDIUM, SUSPICIOUS, HIGH, CRITICAL]
+                example: "CRITICAL"
+              trustScore:
+                type: integer
+                example: 13
               verdict:
                 type: string
                 enum: [FAKE, REAL]
                 example: "FAKE"
+              interpretedLabel:
+                type: string
+                example: "Deepfake confirmado"
+              analysisCategory:
+                type: string
+                example: "deepfake"
               fileUrl:
                 type: string
                 format: uri
-                example: "https://deepfake-detector-files.s3.amazonaws.com/video.mp4"
+                example: "https://deepfake-detector-files.s3.amazonaws.com/foto.jpg"
               createdAt:
                 type: string
                 format: date-time
-                example: "2025-11-19T04:01:45Z"
-
-    #################################
-    # Files Schemas
-    #################################
-
-    UploadUrlResponse:
-      type: object
-      required:
-        - uploadUrl
-        - fields
-        - fileUrl
-      properties:
-        uploadUrl:
-          type: string
-          format: uri
-          description: URL base para subir el archivo (POST multipart)
-          example: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/"
-        fields:
-          type: object
-          description: Campos que deben incluirse en el POST multipart
-          required:
-            - bucket
-            - key
-            - X-Amz-Algorithm
-            - X-Amz-Credential
-            - X-Amz-Date
-            - Policy
-            - X-Amz-Signature
-          properties:
-            bucket:
-              type: string
-              example: "deepfake-detector-files"
-            key:
-              type: string
-              example: "1763532656440_video.mp4"
-            X-Amz-Algorithm:
-              type: string
-              example: "AWS4-HMAC-SHA256"
-            X-Amz-Credential:
-              type: string
-              example: "AKIAVZXYWLVGWQ5UBY5C/20251119/us-east-1/s3/aws4_request"
-            X-Amz-Date:
-              type: string
-              example: "20251119T040145Z"
-            Policy:
-              type: string
-              example: "eyJleHBpcmF0aW9uIjoiMjAyNS0xMS0xOVQwMToz..."
-            X-Amz-Signature:
-              type: string
-              example: "d1e5219137f9969c5c869c1286ed25b7813fcdd8..."
-        fileUrl:
-          type: string
-          format: uri
-          description: URL completa del archivo una vez subido (usar en /api/analysis/start)
-          example: "https://deepfake-detector-files.s3.us-east-1.amazonaws.com/1763532656440_video.mp4"
-
-    #################################
-    # Analysis Schemas
-    #################################
-    AnalysisStartResponse:
-      type: object
-      required:
-        - success
-        - referenceId
-        - message
-        - status
-      properties:
-        success:
-          type: boolean
-          example: true
-        referenceId:
-          type: string
-          description: ID único del análisis (guardar para consultar resultado)
-          example: "29D027498EE8EBB"
-        message:
-          type: string
-          example: "Archivo enviado a análisis correctamente. El procesamiento puede tomar unos segundos."
-        estimatedTime:
-          type: string
-          description: Tiempo estimado de procesamiento
-          example: "5-30 segundos"
-        status:
-          type: string
-          enum:
-            - processing
-          example: "processing"
-
-    AnalysisResultComplete:
-      type: object
-      required:
-        - success
-        - processing
-        - result
-      properties:
-        success:
-          type: boolean
-          example: true
-        processing:
-          type: boolean
-          example: false
-        result:
-          type: object
-          required:
-            - referenceId
-            - status
-            - isDeepfake
-            - isAuthentic
-          properties:
-            referenceId:
-              type: string
-              description: ID del análisis
-              example: "29D027498EE8EBB"
-            type:
-              type: string
-              example: "deepfake"
-            status:
-              type: integer
-              description: "0 = deepfake detectado, 1 = contenido auténtico"
-              enum: [0, 1]
-              example: 0
-            isDeepfake:
-              type: boolean
-              description: true si es deepfake
-              example: true
-            isAuthentic:
-              type: boolean
-              description: true si es auténtico
-              example: false
-            verdict:
-              type: string
-              description: Veredicto simple
-              enum:
-                - FAKE
-                - REAL
-              example: "FAKE"
-            confidence:
-              type: string
-              description: Nivel de confianza en porcentaje (string para precisión)
-              example: "87.32"
-            deepfake_score:
-              type: number
-              format: float
-              description: Score original de Facia (0-1)
-              minimum: 0
-              maximum: 1
-              example: 0.8732
-            decline_code:
-              type: string
-              nullable: true
-              description: Código de rechazo (solo si es deepfake)
-              example: "FADR07"
-            decline_reason:
-              type: string
-              nullable: true
-              description: Motivo del rechazo legible
-              example: "Evasion attack detected."
-            declined_proof:
-              type: string
-              format: uri
-              nullable: true
-              description: URL de imagen de prueba (expira en 24h)
-              example: "https://api.facia.ai/api/image-url/691d5beca320adf85120e159"
-            timestamp:
-              type: string
-              format: date-time
-              description: Fecha y hora del análisis
-              example: "2025-11-19T04:01:45Z"
-
-    AnalysisResultProcessing:
-      type: object
-      required:
-        - success
-        - processing
-        - message
-        - result
-      properties:
-        success:
-          type: boolean
-          example: true
-        processing:
-          type: boolean
-          example: true
-        message:
-          type: string
-          example: "El análisis aún está en proceso. Por favor, vuelve a consultar en unos segundos."
-        result:
-          type: object
-          required:
-            - referenceId
-            - status
-          properties:
-            referenceId:
-              type: string
-              example: "29D027498EE8EBB"
-            status:
-              type: string
-              enum:
-                - processing
-              example: "processing"
-
-    StatusCheckResponse:
-      type: object
-      required:
-        - success
-        - referenceId
-        - status
-        - isComplete
-      properties:
-        success:
-          type: boolean
-          example: true
-        referenceId:
-          type: string
-          example: "29D027498EE8EBB"
-        status:
-          type: string
-          enum:
-            - processing
-            - completed
-          example: "completed"
-        isComplete:
-          type: boolean
-          description: true si el análisis está completo
-          example: true
-        result:
-          type: object
-          nullable: true
-          description: Resultado resumido (solo si está completo)
-          properties:
-            isDeepfake:
-              type: boolean
-              example: true
-            confidence:
-              type: string
-              example: "87.32"
-            verdict:
-              type: string
-              enum:
-                - FAKE
-                - REAL
-              example: "FAKE"
+                example: "2026-05-18T00:55:58Z"
 
     #################################
     # Error Schema
@@ -1219,12 +1204,12 @@ components:
           example: false
         error:
           type: string
-          description: Mensaje de error legible
+          description: Mensaje de error legible para el usuario
           example: "No se pudo procesar la solicitud"
         details:
           type: string
           nullable: true
-          description: Detalles técnicos (solo en desarrollo)
+          description: Detalles técnicos (solo en modo desarrollo)
           example: "S3 Access Denied: Invalid credentials"
         code:
           type: string

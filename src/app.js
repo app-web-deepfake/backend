@@ -107,7 +107,7 @@ app.get("/", (req, res) => {
 
 // Rutas
 app.use("/upload", uploadRoutes);
-app.use("/facia", faciaRoutes);
+app.use("/deepfake", faciaRoutes);
 app.use("/auth", authLimiter, authRoutes);
 app.use("/historial", historialRoutes);
 app.use("/analysis", analysisRoutes);

@@ -125,63 +125,56 @@ function normalizeZeroTrueResponse(raw, mediaType) {
     }
 
     // ── Señales internas de ZeroTrue ─────────────────────────────────────────────
-    // suspected_models son pesos de ATRIBUCIÓN entre modelos IA (suman ~100%),
-    // NO confianza individual de que el contenido sea IA → no afectan el score.
-    const extra         = data.details_extra || data.details?.extra || {};
-    const features      = extra.features || {};
-    const ganArtifacts       = typeof features.gan_artifacts      === 'number' ? features.gan_artifacts      : null;
+    const extra              = data.details_extra || data.details?.extra || {};
+    const features           = extra.features || {};
+    const ganArtifacts       = typeof features.gan_artifacts       === 'number' ? features.gan_artifacts       : null;
     const textureConsistency = typeof features.texture_consistency === 'number' ? features.texture_consistency : null;
     const faceSymmetry       = typeof features.face_symmetry       === 'number' ? features.face_symmetry       : null;
     const suspectedModels    = data.suspected_models || [];
+    const summaryConfidence  = data.details?.summary?.confidence_pct
+        ?? data.details_summary?.confidence_pct ?? 0;
 
-    // Confianza global que ZeroTrue tiene en su propio veredicto (0-100)
-    const summaryConfidence = data.details?.summary?.confidence_pct
-        ?? data.details_summary?.confidence_pct
-        ?? 0;
+    // Top modelo atribuido (solo indica a qué IA se parece, no si ES IA)
+    const topModel = suspectedModels.length > 0
+        ? suspectedModels.reduce((a, b) =>
+            (a.confidence_pct || 0) > (b.confidence_pct || 0) ? a : b)
+        : null;
+    const topModelName = (topModel?.model_name || topModel?.name || '').toLowerCase();
+    const topModelPct  = topModel?.confidence_pct || 0;
+    if (topModelName) {
+        console.log(`[ZeroTrue] Top attributed model (solo atribución): ${topModelName} ${topModelPct}%`);
+    }
 
-    // ── Corrección 1: gan_artifacts alto con ZeroTrue poco seguro ────────────
-    // Solo actúa si ZeroTrue mismo no está muy seguro de su veredicto (<70%
-    // de confianza) Y hay un artefacto GAN claro (>0.80).
-    // Caso: gan=0.71, conf=97.6% → NO corrige (ZeroTrue está seguro).
+    // ── Corrección 1: gan_artifacts alto + ZeroTrue poco seguro ──────────────
+    // Solo activa si ZeroTrue mismo tiene baja confianza en su veredicto
     if (ganArtifacts !== null && ganArtifacts > 0.80 && score < 0.35 && summaryConfidence < 70) {
         const corrected = (score + ganArtifacts * 0.5) / 2;
         console.log(`[ZeroTrue] Fix gan_artifacts=${ganArtifacts} (conf=${summaryConfidence}%): ${score.toFixed(3)} → ${corrected.toFixed(3)}`);
         score = Math.min(1, corrected);
     }
 
-    // ── Corrección 2: patrón combinado de imagen IA hiperrealista ────────────
-    // ZeroTrue falla con imágenes de difusión foto-realistas (caras perfectas).
-    // Señales: gan_artifacts moderado + texture_consistency muy alto + face_symmetry alto
-    // + ZeroTrue dice "human" con alta confianza pero el CI superior es > 0.
-    // En ese caso forzamos el score al mínimo del rango SUSPICIOUS (0.46)
-    // para que el resultado sea "No podemos confirmar la autenticidad" en vez de "Auténtico".
-    if (
-        ganArtifacts      !== null && ganArtifacts      >= 0.68 &&
-        textureConsistency !== null && textureConsistency >= 0.85 &&
-        faceSymmetry       !== null && faceSymmetry       >= 0.74 &&
-        score < 0.30 &&
-        mediaType === 'image'
-    ) {
-        // Score mínimo para caer en SUSPICIOUS del TrustAnalysisEngine
-        const suspiciousFloor = 0.46;
-        console.log(`[ZeroTrue] Patrón IA hiperrealista detectado (gan=${ganArtifacts}, tex=${textureConsistency}, sym=${faceSymmetry}): score ${score.toFixed(3)} → ${suspiciousFloor}`);
-        score = suspiciousFloor;
+    // ── Corrección 2: patrón imagen IA hiperrealista (puntuación compuesta) ──
+    // ZeroTrue es no-determinista — los features varían entre llamadas.
+    // En vez de umbrales fijos, usamos una puntuación compuesta:
+    //   - cada feature contribuye si supera su umbral MÍNIMO
+    //   - necesitamos al menos 2 de 3 señales + score bajo
+    if (score < 0.30 && mediaType === 'image') {
+        let aiSignals = 0;
+        if (ganArtifacts       !== null && ganArtifacts       >= 0.60) aiSignals++;
+        if (textureConsistency !== null && textureConsistency >= 0.65) aiSignals++;
+        if (faceSymmetry       !== null && faceSymmetry       >= 0.70) aiSignals++;
+
+        if (aiSignals >= 2) {
+            console.log(`[ZeroTrue] Patrón IA hiperrealista (${aiSignals}/3 señales: gan=${ganArtifacts}, tex=${textureConsistency}, sym=${faceSymmetry}): score ${score.toFixed(3)} → 0.46`);
+            score = 0.46;   // mínimo para caer en zona SUSPICIOUS
+        }
     }
 
     score = Math.min(1, Math.max(0, score));
 
-    // ── Detección de rostro ───────────────────────────────────────────────────
-    // Usamos areas_found (regiones detectadas por ZeroTrue) o por tipo de media.
-    // suspected_models siempre tiene entradas — no es indicador de presencia de rostro.
-    const areasFound = extra.areas_found ?? 0;
-    const hasFace = areasFound > 0 || mediaType === 'image';
-
-    // Log para debug
-    if (suspectedModels.length > 0) {
-        const top = suspectedModels.reduce((a, b) =>
-            (b.confidence_pct || 0) > (a.confidence_pct || 0) ? b : a, suspectedModels[0]);
-        console.log(`[ZeroTrue] Top attributed model (solo atribución): ${top.model_name || top.name} ${top.confidence_pct}%`);
-    }
+    // ── Detección de rostro ─────────────────────────────────────────────────────
+    // suspected_models con deepfake → hay rostro. Si no hay modelos, asumimos por tipo.
+    const hasFace = suspectedModels.length > 0 ? true : mediaType === 'image';
 
     return {
         score,

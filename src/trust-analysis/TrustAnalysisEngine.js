@@ -77,100 +77,94 @@ function isGreyZone(score, riskLevel) {
     return riskLevel === 'HIGH' && score <= GREY_ZONE_MAX;
 }
 
-function getInterpretedLabel({ riskLevel, evasionAttack, invalidCase, greyZone, hasFace }) {
-    if (invalidCase)   return 'Análisis no concluyente';
-    if (evasionAttack) {
-        return (riskLevel === 'HIGH' || riskLevel === 'CRITICAL')
-            ? 'Contenido falso detectado'
-            : 'Resultado no concluyente';
-    }
-    if (greyZone) return 'Resultado incierto — verificar manualmente';
+function getInterpretedLabel({ riskLevel, invalidCase, greyZone, hasFace }) {
+    if (invalidCase) return 'No pudimos analizar este contenido';
+    if (greyZone)    return 'Resultado no concluyente';
 
     if (!hasFace) {
         return {
-            LOW:        'Contenido aparentemente original',
-            MEDIUM:     'Contenido posiblemente generado por IA',
-            SUSPICIOUS: 'Contenido con indicios de generación artificial',
-            HIGH:       'Contenido probablemente generado por IA',
-            CRITICAL:   'Contenido generado por IA confirmado',
+            LOW:        'El contenido parece original',
+            MEDIUM:     'El contenido podría ser generado por IA',
+            SUSPICIOUS: 'No podemos confirmar si es generado por IA',
+            HIGH:       'El contenido probablemente fue generado por IA',
+            CRITICAL:   'El contenido fue generado por IA',
         }[riskLevel];
     }
 
     return {
-        LOW:        'Contenido auténtico',
-        MEDIUM:     'Contenido posiblemente auténtico',
-        SUSPICIOUS: 'Resultado sospechoso — no concluyente',
-        HIGH:       'Posible deepfake',
-        CRITICAL:   'Deepfake confirmado',
+        LOW:        'El contenido es auténtico',
+        MEDIUM:     'El contenido parece auténtico',
+        SUSPICIOUS: 'No podemos confirmar la autenticidad',
+        HIGH:       'El contenido podría estar manipulado',
+        CRITICAL:   'El contenido está manipulado digitalmente',
     }[riskLevel];
 }
 
-function getExplanation({ score, riskLevel, evasionAttack, mediaType, invalidCase, greyZone, hasFace }) {
+function getExplanation({ score, riskLevel, mediaType, invalidCase, greyZone, hasFace }) {
     const pct  = Math.round(score * 100);
     const tipo = mediaType === 'video' ? 'video' : 'imagen';
 
     if (invalidCase) {
-        return `No se pudo determinar con certeza si este contenido es auténtico o manipulado. ` +
+        return `No logramos analizar este contenido correctamente. ` +
             `Motivo: ${invalidCase.reason} ` +
-            `El índice de manipulación registrado fue del ${pct}%, pero este valor no es confiable.`;
-    }
-    if (evasionAttack) {
-        return `El sistema detectó que este contenido intentó evadir la detección, ` +
-            `lo cual es una señal clara de manipulación digital. ` +
-            `El índice de manipulación base fue del ${pct}%.`;
+            `Intenta subir una imagen más clara o con mejor iluminación.`;
     }
     if (greyZone) {
-        return `Esta ${tipo} presenta un índice de manipulación del ${pct}%, en zona de incertidumbre. ` +
-            `Puede deberse a compresión de redes sociales, capturas de pantalla, o iluminación artificial. ` +
-            `El resultado no es concluyente — verifica el origen del contenido.`;
+        return `Esta ${tipo} tiene un ${pct}% de probabilidad de manipulación, lo que está en una zona de incertidumbre. ` +
+            `Esto puede ocurrir con fotos comprimidas por WhatsApp o Instagram, capturas de pantalla, ` +
+            `o imágenes con filtros. No podemos afirmar con certeza si fue editada — te recomendamos ` +
+            `buscar la fuente original.`;
     }
 
     if (riskLevel === 'SUSPICIOUS') {
         if (!hasFace) {
-            return `Esta ${tipo} presenta un índice de ${pct}%, en una zona de incertidumbre. ` +
-                `No se detectó un rostro humano — el análisis evalúa si el contenido fue generado ` +
-                `artificialmente (IA). El resultado no es definitivo — se recomienda verificar la fuente.`;
+            return `Esta ${tipo} tiene indicios de que podría haber sido creada con inteligencia artificial, ` +
+                `pero el resultado no es definitivo (${pct}% de probabilidad). ` +
+                `No detectamos un rostro humano. Verifica de dónde proviene antes de compartirla.`;
         }
-        return `Esta ${tipo} presenta un índice de manipulación del ${pct}%, en la zona gris ` +
-            `entre contenido auténtico y manipulado. Puede deberse a filtros, compresión agresiva ` +
-            `de plataformas como WhatsApp o TikTok, o ediciones menores. ` +
-            `No es suficiente para confirmar un deepfake — verifica la fuente.`;
+        return `Esta ${tipo} tiene un ${pct}% de probabilidad de manipulación, lo que no es suficiente ` +
+            `para confirmar ni descartar que haya sido editada. ` +
+            `Podría deberse a filtros, compresión de WhatsApp o TikTok, o ediciones menores. ` +
+            `Te recomendamos verificar la fuente del contenido antes de compartirlo.`;
     }
 
     if (!hasFace) {
         return {
             LOW:
-                `Esta ${tipo} presenta un índice de ${pct}%, dentro del rango esperado para contenido original. ` +
-                `No se detectó un rostro humano — el análisis evaluó características generales de generación artificial.`,
+                `Esta ${tipo} tiene solo un ${pct}% de probabilidad de haber sido generada por IA, ` +
+                `lo que indica que muy probablemente es original. ` +
+                `No detectamos un rostro humano — analizamos características generales del contenido.`,
             MEDIUM:
-                `Esta ${tipo} presenta un índice de ${pct}%. No se detectó un rostro humano. ` +
-                `El contenido podría haber sido generado o modificado con herramientas de IA. ` +
-                `Se recomienda verificar su procedencia.`,
+                `Esta ${tipo} tiene un ${pct}% de probabilidad de haber sido creada o modificada con IA. ` +
+                `No detectamos un rostro humano. Puede ser contenido auténtico, ` +
+                `pero te recomendamos verificar su procedencia.`,
             HIGH:
-                `Esta ${tipo} presenta un índice de ${pct}%, indicando alta probabilidad de haber sido ` +
-                `generado por inteligencia artificial. No se detectó un rostro humano — puede tratarse de ` +
-                `imágenes de animales, paisajes o arte generado por IA.`,
+                `Esta ${tipo} tiene un ${pct}% de probabilidad de haber sido generada por inteligencia artificial. ` +
+                `No detectamos un rostro humano — puede ser una imagen de paisaje, animal o arte digital generado por IA. ` +
+                `Verifica la fuente antes de usarla o compartirla.`,
             CRITICAL:
-                `Esta ${tipo} presenta un índice de ${pct}%, lo que indica con alta certeza que el contenido ` +
-                `fue generado digitalmente mediante inteligencia artificial.`,
+                `Esta ${tipo} tiene un ${pct}% de probabilidad de ser generada por IA, lo que indica con alta certeza ` +
+                `que fue creada digitalmente. No la uses ni compartas sin verificar su origen.`,
         }[riskLevel];
     }
 
     return {
         LOW:
-            `Esta ${tipo} presenta un índice de manipulación del ${pct}%, dentro del rango normal. ` +
-            `El contenido aparenta ser auténtico.`,
+            `Esta ${tipo} tiene solo un ${pct}% de probabilidad de manipulación. ` +
+            `Eso significa que muy probablemente es auténtica y no fue editada digitalmente. ` +
+            `Puedes confiar en su contenido.`,
         MEDIUM:
-            `Esta ${tipo} presenta un índice de manipulación del ${pct}%, moderadamente elevado. ` +
-            `Pueden existir alteraciones menores o compresión de plataformas digitales. ` +
-            `Se recomienda verificar el origen.`,
+            `Esta ${tipo} tiene un ${pct}% de probabilidad de manipulación. ` +
+            `Puede ser auténtica, pero existen algunas señales menores que vale la pena tener en cuenta. ` +
+            `Verifica de dónde proviene antes de compartirla.`,
         HIGH:
-            `Esta ${tipo} presenta un índice de manipulación del ${pct}%, lo que indica alta probabilidad ` +
-            `de edición digital o generación artificial. Sin embargo, factores como compresión severa ` +
-            `o rostros parciales pueden influir en este resultado.`,
+            `Esta ${tipo} tiene un ${pct}% de probabilidad de haber sido editada o manipulada digitalmente. ` +
+            `Encontramos señales que sugieren que el contenido pudo haber sido alterado. ` +
+            `No la compartas sin verificar su origen.`,
         CRITICAL:
-            `Esta ${tipo} presenta un índice de manipulación del ${pct}%, lo que indica con alta certeza ` +
-            `que el contenido fue generado o manipulado digitalmente mediante inteligencia artificial.`,
+            `Esta ${tipo} tiene un ${pct}% de probabilidad de ser falsa o manipulada digitalmente. ` +
+            `Nuestro análisis indica con alta certeza que fue alterada mediante inteligencia artificial. ` +
+            `No compartas este contenido — podría causar daño si se difunde.`,
     }[riskLevel];
 }
 
@@ -274,7 +268,7 @@ export async function analyze({
     const manipulationIndex = Math.round(score * 100);
     const recidivism        = await detectRecidivism(userId);
 
-    const ctx = { riskLevel, evasionAttack, invalidCase, greyZone, hasFace, score, mediaType: resolvedMediaType };
+    const ctx = { riskLevel, invalidCase, greyZone, hasFace, score, mediaType: resolvedMediaType };
 
     const interpretedLabel = getInterpretedLabel(ctx);
     const explanation      = getExplanation(ctx);
@@ -290,11 +284,12 @@ export async function analyze({
                     ? 'deepfake'
                     : 'ai-generated';
 
-    const isDeepfake = evasionAttack
-        ? (riskLevel === 'HIGH' || riskLevel === 'CRITICAL') && (faciaStatus === null || faciaStatus === 0)
-        : invalidCase || greyZone || riskLevel === 'SUSPICIOUS'
-            ? false
-            : (riskLevel === 'HIGH' || riskLevel === 'CRITICAL') && (faciaStatus === null || faciaStatus === 0);
+    // Con ZeroTrue, faciaStatus siempre es null.
+    // isDeepfake solo es true si riskLevel es HIGH o CRITICAL y no hay incertidumbre.
+    const isDeepfake = (invalidCase || greyZone || riskLevel === 'SUSPICIOUS'
+        || riskLevel === 'LOW' || riskLevel === 'MEDIUM')
+        ? false
+        : (riskLevel === 'HIGH' || riskLevel === 'CRITICAL');
 
     const verdict = isDeepfake ? 'FAKE' : 'REAL';
 

@@ -102,44 +102,104 @@ async function downloadFromS3(fileUrl) {
  *   suspected_models   → array de modelos detectados
  */
 function normalizeZeroTrueResponse(raw, mediaType) {
-    // El SDK aplana result al nivel raíz; lo mismo hacemos aquí
+    // ZeroTrue devuelve los campos en raw.result — los aplanamos
     const data = (raw.result && typeof raw.result === 'object')
         ? { ...raw, ...raw.result }
         : raw;
 
-    const aiPct = typeof data.ai_probability === 'number'
-        ? data.ai_probability
-        : typeof data.combined_probability === 'number'
-            ? data.combined_probability
+    // ── Score base ──────────────────────────────────────────────────────────────
+    // ai_probability viene en 0-100 o 0-1 (verificamos ambos)
+    let aiPct = typeof data.ai_probability === 'number' ? data.ai_probability
+        : typeof data.combined_probability === 'number' ? data.combined_probability
             : 50;
+
+    // Si el valor es claramente 0-1 (ej: 0.024), convertimos a porcentaje
+    if (aiPct <= 1.0 && aiPct >= 0) aiPct = aiPct * 100;
 
     let score = Math.min(1, Math.max(0, aiPct / 100));
 
-    // Si ZeroTrue dice "human" pero el score quedó alto, invertir
+    // Si ZeroTrue dice "human_created" pero el score quedó alto, invertir
     const resultType = (data.result_type || '').toLowerCase();
-    if (resultType === 'human' && score > 0.5) score = 1 - score;
+    if ((resultType === 'human' || resultType === 'human_created') && score > 0.5) {
+        score = 1 - score;
+    }
 
-    // suspected_models presentes → es deepfake con rostro detectado
-    const hasFace = Array.isArray(data.suspected_models) && data.suspected_models.length > 0
-        ? true
-        : mediaType === 'image';
+    // ── Señales internas de ZeroTrue ─────────────────────────────────────────────
+    // suspected_models son pesos de ATRIBUCIÓN entre modelos IA (suman ~100%),
+    // NO confianza individual de que el contenido sea IA → no afectan el score.
+    const extra         = data.details_extra || data.details?.extra || {};
+    const features      = extra.features || {};
+    const ganArtifacts       = typeof features.gan_artifacts      === 'number' ? features.gan_artifacts      : null;
+    const textureConsistency = typeof features.texture_consistency === 'number' ? features.texture_consistency : null;
+    const faceSymmetry       = typeof features.face_symmetry       === 'number' ? features.face_symmetry       : null;
+    const suspectedModels    = data.suspected_models || [];
+
+    // Confianza global que ZeroTrue tiene en su propio veredicto (0-100)
+    const summaryConfidence = data.details?.summary?.confidence_pct
+        ?? data.details_summary?.confidence_pct
+        ?? 0;
+
+    // ── Corrección 1: gan_artifacts alto con ZeroTrue poco seguro ────────────
+    // Solo actúa si ZeroTrue mismo no está muy seguro de su veredicto (<70%
+    // de confianza) Y hay un artefacto GAN claro (>0.80).
+    // Caso: gan=0.71, conf=97.6% → NO corrige (ZeroTrue está seguro).
+    if (ganArtifacts !== null && ganArtifacts > 0.80 && score < 0.35 && summaryConfidence < 70) {
+        const corrected = (score + ganArtifacts * 0.5) / 2;
+        console.log(`[ZeroTrue] Fix gan_artifacts=${ganArtifacts} (conf=${summaryConfidence}%): ${score.toFixed(3)} → ${corrected.toFixed(3)}`);
+        score = Math.min(1, corrected);
+    }
+
+    // ── Corrección 2: patrón combinado de imagen IA hiperrealista ────────────
+    // ZeroTrue falla con imágenes de difusión foto-realistas (caras perfectas).
+    // Señales: gan_artifacts moderado + texture_consistency muy alto + face_symmetry alto
+    // + ZeroTrue dice "human" con alta confianza pero el CI superior es > 0.
+    // En ese caso forzamos el score al mínimo del rango SUSPICIOUS (0.46)
+    // para que el resultado sea "No podemos confirmar la autenticidad" en vez de "Auténtico".
+    if (
+        ganArtifacts      !== null && ganArtifacts      >= 0.68 &&
+        textureConsistency !== null && textureConsistency >= 0.85 &&
+        faceSymmetry       !== null && faceSymmetry       >= 0.74 &&
+        score < 0.30 &&
+        mediaType === 'image'
+    ) {
+        // Score mínimo para caer en SUSPICIOUS del TrustAnalysisEngine
+        const suspiciousFloor = 0.46;
+        console.log(`[ZeroTrue] Patrón IA hiperrealista detectado (gan=${ganArtifacts}, tex=${textureConsistency}, sym=${faceSymmetry}): score ${score.toFixed(3)} → ${suspiciousFloor}`);
+        score = suspiciousFloor;
+    }
+
+    score = Math.min(1, Math.max(0, score));
+
+    // ── Detección de rostro ───────────────────────────────────────────────────
+    // Usamos areas_found (regiones detectadas por ZeroTrue) o por tipo de media.
+    // suspected_models siempre tiene entradas — no es indicador de presencia de rostro.
+    const areasFound = extra.areas_found ?? 0;
+    const hasFace = areasFound > 0 || mediaType === 'image';
+
+    // Log para debug
+    if (suspectedModels.length > 0) {
+        const top = suspectedModels.reduce((a, b) =>
+            (b.confidence_pct || 0) > (a.confidence_pct || 0) ? b : a, suspectedModels[0]);
+        console.log(`[ZeroTrue] Top attributed model (solo atribución): ${top.model_name || top.name} ${top.confidence_pct}%`);
+    }
 
     return {
         score,
         mediaType,
         hasFace,
         details: {
-            zerotrue_id:       data.id                  || raw.id || null,
-            status:            data.status              || null,
-            result_type:       data.result_type         || null,
-            ai_probability:    data.ai_probability      ?? null,
-            human_probability: data.human_probability   ?? null,
-            suspected_models:  data.suspected_models    || [],
-            ml_model:          data.ml_model            || null,
-            ml_model_version:  data.ml_model_version    || null,
-            resolution:        data.resolution          || null,
-            size_bytes:        data.size_bytes          || null,
-            rawResponse:       raw,
+            zerotrue_id:        data.id               || raw.id || null,
+            status:             data.status            || null,
+            result_type:        data.result_type       || null,
+            ai_probability:     data.ai_probability    ?? null,
+            human_probability:  data.human_probability ?? null,
+            suspected_models:   suspectedModels,
+            gan_artifacts:      ganArtifacts,
+            ml_model:           data.ml_model          || null,
+            ml_model_version:   data.ml_model_version  || null,
+            resolution:         data.resolution        || null,
+            size_bytes:         data.size_bytes        || null,
+            rawResponse:        raw,
         },
     };
 }
@@ -259,7 +319,9 @@ export async function sendToDeepfake(fileUrl) {
 
     // 3. Polling hasta resultado completo
     const rawResult  = await pollForResult(checkId);
+    console.log("[ZeroTrue] Raw result completo:", JSON.stringify(rawResult, null, 2));
     const normalized = normalizeZeroTrueResponse(rawResult, mediaType);
+    console.log("[ZeroTrue] Score:", normalized.score, "| hasFace:", normalized.hasFace, "| result_type:", rawResult?.result?.result_type || rawResult?.result_type || "N/A");
 
     return { ...normalized, analysisId: checkId };
 }

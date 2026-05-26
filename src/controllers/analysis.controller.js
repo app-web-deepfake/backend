@@ -1,4 +1,7 @@
 /**
+ * analysis.controller.js
+ * Actualizado para usar deepfake.service.js (ZeroTrue) en lugar de facia.service.js
+ *
  * CAMBIOS vs versión anterior:
  * - Import: facia.service → deepfake.service
  * - sendToFacia → sendToDeepfake (retorna score+hasFace directamente, sin polling)
@@ -65,13 +68,25 @@ export const startAnalysis = async (req, res) => {
                 await FileCache.findOneAndUpdate({ fileHash }, { $inc: { hitCount: 1 } });
 
                 saveAnalysisRecord({
-                    userId: req.userId || null, fileUrl, fileName: fileName || null,
-                    faciaReferenceId: cached.faciaReferenceId,
-                    verdict: cached.verdict, isDeepfake: cached.isDeepfake,
-                    confidence: cached.confidence, riskLevel: cached.riskLevel,
-                    trustScore: cached.trustScore, interpretedLabel: cached.interpretedLabel,
-                    explanation: cached.explanation, recommendations: cached.recommendations,
-                    analysisCategory: cached.analysisCategory, faciaResponse: null,
+                    userId:            req.userId || null,
+                    fileUrl,
+                    fileName:          fileName || null,
+                    faciaReferenceId:  cached.faciaReferenceId,
+                    verdict:           cached.verdict,
+                    isDeepfake:        cached.isDeepfake,
+                    confidence:        cached.confidence,
+                    riskLevel:         cached.riskLevel,
+                    trustScore:        cached.trustScore,
+                    manipulationIndex: cached.manipulationIndex,
+                    interpretedLabel:  cached.interpretedLabel,
+                    explanation:       cached.explanation,
+                    recommendations:   cached.recommendations,
+                    analysisCategory:  cached.analysisCategory,
+                    isInconclusive:    cached.isInconclusive || false,
+                    isGreyZone:        cached.isGreyZone     || false,
+                    isSuspicious:      cached.isSuspicious   || false,
+                    hasFace:           cached.hasFace        ?? null,
+                    faciaResponse:     null,
                 }).catch(err => console.error('Error guardando registro cacheado:', err));
 
                 return res.status(200).json({
@@ -82,6 +97,7 @@ export const startAnalysis = async (req, res) => {
                     message: 'Resultado obtenido del caché (archivo ya analizado anteriormente).',
                     result: {
                         analysisId:        cached.faciaReferenceId,
+                        fileUrl:           fileUrl,
                         verdict:           cached.verdict,
                         isDeepfake:        cached.isDeepfake,
                         isAuthentic:       !cached.isDeepfake,
@@ -111,23 +127,25 @@ export const startAnalysis = async (req, res) => {
 
         // Guardar registro completo inmediatamente (no hay polling)
         await saveAnalysisRecord({
-            userId:           req.userId || null,
+            userId:            req.userId || null,
             fileUrl,
-            fileName:         fileName || null,
-            faciaReferenceId: analysisId,
-            verdict:          trust.verdict,
-            isDeepfake:       trust.isDeepfake,
-            confidence:       typeof score === 'number' ? (score * 100).toFixed(2) : null,
+            fileName:          fileName || null,
+            faciaReferenceId:  analysisId,
+            verdict:           trust.verdict,
+            isDeepfake:        trust.isDeepfake,
+            confidence:        typeof score === 'number' ? (score * 100).toFixed(2) : null,
             manipulationIndex: trust.manipulationIndex,
-            riskLevel:        trust.riskLevel,
-            trustScore:       trust.trustScore,
-            interpretedLabel: trust.interpretedLabel,
-            explanation:      trust.explanation,
-            recommendations:  trust.recommendations,
-            analysisCategory: trust.analysisCategory,
-            isInconclusive:   trust.isInconclusive,
-            isGreyZone:       trust.isGreyZone,
-            faciaResponse:    details,   // guardamos el raw de ZeroTrue en el mismo campo
+            riskLevel:         trust.riskLevel,
+            trustScore:        trust.trustScore,
+            interpretedLabel:  trust.interpretedLabel,
+            explanation:       trust.explanation,
+            recommendations:   trust.recommendations,
+            analysisCategory:  trust.analysisCategory,
+            isInconclusive:    trust.isInconclusive,
+            isGreyZone:        trust.isGreyZone,
+            isSuspicious:      trust.isSuspicious   || false,  // ← faltaba
+            hasFace:           ztResult.hasFace      ?? null,  // ← faltaba
+            faciaResponse:     details,
             ...(fileHash ? { fileHash } : {}),
         }).catch(err => console.error('Error guardando registro:', err));
 
@@ -161,6 +179,7 @@ export const startAnalysis = async (req, res) => {
             message:    'Análisis completado correctamente.',
             result: {
                 analysisId,
+                fileUrl,
                 timestamp:         new Date().toISOString(),
                 mediaType:         ztResult.mediaType,
                 deepfake_score:    score,
@@ -233,6 +252,7 @@ export const getAnalysisResult = async (req, res) => {
             success: true, processing: false, fromCache: false,
             result: {
                 analysisId:        record.faciaReferenceId,
+                fileUrl:           record.fileUrl || null,
                 timestamp:         record.createdAt,
                 mediaType:         record.faciaResponse?.mediaType || null,
                 deepfake_score:    parseFloat(record.confidence) / 100 || null,

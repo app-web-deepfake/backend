@@ -13,8 +13,8 @@ const AnalysisSchema = new mongoose.Schema({
     isDeepfake: { type: Boolean, default: null },
     confidence: { type: String, default: null },  // score crudo de Facia (interno)
 
-    // TrustAnalysisEngine v3
-    riskLevel:         { type: String, enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"], default: null },
+    // TrustAnalysisEngine v4
+    riskLevel:         { type: String, enum: ["LOW", "MEDIUM", "SUSPICIOUS", "HIGH", "CRITICAL"], default: null },
     trustScore:        { type: Number, default: null },
     manipulationIndex: { type: Number, default: null },   // "Índice de manipulación" 0-100
     interpretedLabel:  { type: String, default: null },
@@ -23,6 +23,10 @@ const AnalysisSchema = new mongoose.Schema({
     analysisCategory:  { type: String, default: "deepfake" },
     isInconclusive:    { type: Boolean, default: false },
     isGreyZone:        { type: Boolean, default: false },
+    // Campos añadidos en v4 — faltaban en el schema original
+    isSuspicious:      { type: Boolean, default: false },
+    hasFace:           { type: Boolean, default: null },
+    mediaType:         { type: String, enum: ["image", "video"], default: "image" },
 
     createdAt: { type: Date, default: Date.now },
 });

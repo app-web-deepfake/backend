@@ -53,18 +53,37 @@ export const deleteAllAnalysis = async (req, res) => {
     }
 };
 
-export const saveAnalysisRecord = async ({ userId, fileUrl, fileName, faciaReferenceId, verdict, isDeepfake, confidence, faciaResponse, fileHash }) => {
+export const saveAnalysisRecord = async ({
+                                             userId, fileUrl, fileName, faciaReferenceId,
+                                             verdict, isDeepfake, confidence, faciaResponse, fileHash,
+                                             // TrustAnalysisEngine v4 — todos los campos que el controller pasa
+                                             riskLevel, trustScore, manipulationIndex,
+                                             interpretedLabel, explanation, recommendations, analysisCategory,
+                                             isInconclusive, isGreyZone, isSuspicious, hasFace,
+                                         }) => {
     try {
         const record = new Analysis({
-            userId: userId || null,
+            userId:            userId            || null,
             fileUrl,
-            fileName: fileName || null,
-            faciaReferenceId: faciaReferenceId || null,
-            verdict: verdict || "processing",
-            isDeepfake: isDeepfake ?? null,
-            confidence: confidence || null,
-            faciaResponse: faciaResponse || null,
-            fileHash: fileHash || null,  // ← esta línea faltaba
+            fileName:          fileName          || null,
+            faciaReferenceId:  faciaReferenceId  || null,
+            verdict:           verdict           || "processing",
+            isDeepfake:        isDeepfake        ?? null,
+            confidence:        confidence        || null,
+            faciaResponse:     faciaResponse     || null,
+            fileHash:          fileHash          || null,
+            // TrustAnalysisEngine v4
+            riskLevel:         riskLevel         || null,
+            trustScore:        trustScore        ?? null,
+            manipulationIndex: manipulationIndex ?? null,
+            interpretedLabel:  interpretedLabel  || null,
+            explanation:       explanation       || null,
+            recommendations:   recommendations   || [],
+            analysisCategory:  analysisCategory  || "deepfake",
+            isInconclusive:    isInconclusive    || false,
+            isGreyZone:        isGreyZone        || false,
+            isSuspicious:      isSuspicious      || false,
+            hasFace:           hasFace           ?? null,
         });
         await record.save();
         return record;

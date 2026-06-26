@@ -16,6 +16,7 @@ import { sendToDeepfake } from '../services/deepfake.service.js';
 import { saveAnalysisRecord } from './historial.controller.js';
 import { analyze as trustAnalyze } from '../trust-analysis/TrustAnalysisEngine.js';
 import { computeFileHash } from '../utils/fileHash.js';
+import { incrementAnalysisCount } from './streak.controller.js';
 
 // ─── Helper: detectar tipo de media por URL ───────────────────────────────────
 function detectMediaTypeFromUrl(fileUrl) {
@@ -148,6 +149,11 @@ export const startAnalysis = async (req, res) => {
             faciaResponse:     details,
             ...(fileHash ? { fileHash } : {}),
         }).catch(err => console.error('Error guardando registro:', err));
+
+        // Incrementar contador de análisis y racha (no-blocking)
+        if (req.userId) {
+            incrementAnalysisCount(req.userId).catch(() => {});
+        }
 
         // Guardar en caché
         if (fileHash) {

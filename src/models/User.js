@@ -12,9 +12,16 @@ const UserSchema = new mongoose.Schema({
     emailVerificationExpires: { type: Date, default: null },
     resetPasswordToken: { type: String, default: null },
     resetPasswordExpires: { type: Date, default: null },
+
+    // ── Gamificación: racha diaria ──────────────────────────────
+    streak: { type: Number, default: 0 },
+    maxStreak: { type: Number, default: 0 },
+    // lastAnalysisDate: SOLO se actualiza cuando el usuario completa un análisis.
+    // Nunca se toca en login ni checkin manual. Es la fuente de verdad para la racha.
+    lastAnalysisDate: { type: Date, default: null },
+    totalAnalyses: { type: Number, default: 0 },
 });
 
-// Hash password before save
 UserSchema.pre("save", async function (next) {
     if (!this.isModified("password")) return next();
     this.password = await bcrypt.hash(this.password, 10);

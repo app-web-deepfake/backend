@@ -7,6 +7,7 @@ import faciaRoutes from "./routes/facia.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import historialRoutes from "./routes/historial.routes.js";
 import analysisRoutes from "./routes/analysis.routes.js";
+import streakRoutes from "./routes/streak.routes.js";
 import swaggerSpec from "./config/swagger.js";
 
 const app = express();
@@ -111,6 +112,7 @@ app.use("/deepfake", faciaRoutes);
 app.use("/auth", authLimiter, authRoutes);
 app.use("/historial", historialRoutes);
 app.use("/analysis", analysisRoutes);
+app.use("/streak", streakRoutes);
 
 // 404
 app.use((req, res) => {

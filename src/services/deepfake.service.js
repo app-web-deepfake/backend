@@ -20,6 +20,11 @@ import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 const ZEROTRUE_BASE_URL = 'https://api.zerotrue.app';
 const ZEROTRUE_API_KEY  = process.env.ZEROTRUE_API_KEY;
 
+// Modelo de detección propio (microservicio ML in-house).
+// Si USE_INHOUSE_MODEL=true se usa este servicio en lugar de ZeroTrue.
+const USE_INHOUSE_MODEL = process.env.USE_INHOUSE_MODEL === 'true';
+const ML_SERVICE_URL    = process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000';
+
 const POLL_INTERVAL_MS  = 3000;
 const POLL_MAX_ATTEMPTS = 20;   // ~60s total
 
@@ -86,6 +91,49 @@ async function downloadFromS3(fileUrl) {
     } catch (error) {
         console.error('[ZeroTrue] Error S3:', error.message);
         throw new Error(`No se pudo descargar el archivo de S3: ${error.message}`);
+    }
+}
+
+// ─── Inferencia con el modelo propio (microservicio ML) ───────────────────────
+/**
+ * Envía el archivo al microservicio ML propio (POST /analyze, multipart) y
+ * normaliza la respuesta al mismo contrato que ZeroTrue:
+ *   { score, mediaType, hasFace, details, analysisId }
+ * Es síncrono (sin polling): el servicio devuelve el score directamente.
+ *
+ * @param {string} fileUrl  URL del archivo en S3
+ */
+async function sendToInhouseML(fileUrl) {
+    const mediaType = detectMediaType(fileUrl);
+    const filename  = getFilenameFromUrl(fileUrl);
+    const mimeType  = getMimeType(filename);
+
+    console.log(`[ML] Analizando con modelo propio — tipo: ${mediaType} — archivo: ${filename}`);
+    const buffer = await downloadFromS3(fileUrl);
+
+    const form = new FormData();
+    form.append('file', buffer, { filename, contentType: mimeType });
+
+    try {
+        const resp = await axios.post(`${ML_SERVICE_URL}/analyze`, form, {
+            headers:          { ...form.getHeaders() },
+            timeout:          120_000,
+            maxContentLength: Infinity,
+            maxBodyLength:    Infinity,
+        });
+        const d = resp.data || {};
+        console.log('[ML] Score:', d.score, '| detalles:', JSON.stringify(d.details || {}));
+        return {
+            score:      typeof d.score === 'number' ? d.score : 0,
+            mediaType:  d.mediaType || mediaType,
+            hasFace:    typeof d.hasFace === 'boolean' ? d.hasFace : (mediaType === 'image'),
+            details:    { provider: 'inhouse-ml', ...(d.details || {}) },
+            analysisId: d.analysisId || `ml_${Date.now()}`,
+        };
+    } catch (error) {
+        const detail = error.response?.data;
+        console.error('[ML] Error en servicio ML:', error.message, JSON.stringify(detail || ''));
+        throw new Error(`Servicio ML no disponible: ${detail?.detail || error.message}`);
     }
 }
 
@@ -238,6 +286,11 @@ async function pollForResult(checkId) {
  * @returns {Promise<{ score, mediaType, hasFace, details, analysisId }>}
  */
 export async function sendToDeepfake(fileUrl) {
+    // Modelo propio (microservicio ML) — reemplaza a ZeroTrue cuando USE_INHOUSE_MODEL=true
+    if (USE_INHOUSE_MODEL) {
+        return sendToInhouseML(fileUrl);
+    }
+
     if (!ZEROTRUE_API_KEY) {
         throw new Error('ZEROTRUE_API_KEY no configurada. Agrega la variable al .env');
     }

@@ -24,6 +24,7 @@ const ZEROTRUE_API_KEY  = process.env.ZEROTRUE_API_KEY;
 // Si USE_INHOUSE_MODEL=true se usa este servicio en lugar de ZeroTrue.
 const USE_INHOUSE_MODEL = process.env.USE_INHOUSE_MODEL === 'true';
 const ML_SERVICE_URL    = process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000';
+const ML_API_KEY        = process.env.ML_API_KEY || '';   // se envía como header X-API-Key
 
 const POLL_INTERVAL_MS  = 3000;
 const POLL_MAX_ATTEMPTS = 20;   // ~60s total
@@ -116,7 +117,7 @@ async function sendToInhouseML(fileUrl) {
 
     try {
         const resp = await axios.post(`${ML_SERVICE_URL}/analyze`, form, {
-            headers:          { ...form.getHeaders() },
+            headers:          { ...form.getHeaders(), ...(ML_API_KEY ? { 'X-API-Key': ML_API_KEY } : {}) },
             timeout:          120_000,
             maxContentLength: Infinity,
             maxBodyLength:    Infinity,

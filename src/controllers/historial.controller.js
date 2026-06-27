@@ -17,7 +17,8 @@ export const getUserHistory = async (req, res) => {
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
-                .select("fileUrl fileName verdict isDeepfake confidence createdAt faciaReferenceId"),
+                .select("fileUrl fileName verdict isDeepfake confidence createdAt faciaReferenceId " +
+                        "riskLevel isInconclusive isSuspicious isGreyZone interpretedLabel"),
             Analysis.countDocuments(filter),
         ]);
 

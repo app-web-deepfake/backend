@@ -2,24 +2,24 @@ import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
 const UserSchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true, lowercase: true },
-    password: { type: String, required: true },
-    role: { type: String, enum: ["usuario", "admin"], default: "usuario" },
-    createdAt: { type: Date, default: Date.now },
-    emailVerified: { type: Boolean, default: false },
-    emailVerificationToken: { type: String, default: null },
+    name:                     { type: String, required: true },
+    email:                    { type: String, required: true, unique: true, lowercase: true },
+    password:                 { type: String, required: true },
+    role:                     { type: String, enum: ["usuario", "admin"], default: "usuario" },
+    createdAt:                { type: Date, default: Date.now },
+    emailVerified:            { type: Boolean, default: false },
+    emailVerificationToken:   { type: String, default: null },
     emailVerificationExpires: { type: Date, default: null },
-    resetPasswordToken: { type: String, default: null },
-    resetPasswordExpires: { type: Date, default: null },
+    resetPasswordToken:       { type: String, default: null },
+    resetPasswordExpires:     { type: Date, default: null },
 
-    // ── Gamificación: racha diaria ──────────────────────────────
-    streak: { type: Number, default: 0 },
-    maxStreak: { type: Number, default: 0 },
-    // lastAnalysisDate: SOLO se actualiza cuando el usuario completa un análisis.
-    // Nunca se toca en login ni checkin manual. Es la fuente de verdad para la racha.
-    lastAnalysisDate: { type: Date, default: null },
-    totalAnalyses: { type: Number, default: 0 },
+    // Gamificación
+    streak:           { type: Number, default: 0 },
+    maxStreak:        { type: Number, default: 0 },
+    lastAnalysisDate: { type: Date,   default: null }, // solo se toca al completar un análisis
+    totalAnalyses:    { type: Number, default: 0 },
+    todayAnalyses:    { type: Number, default: 0 },    // contador diario — se resetea cada día
+    todayDate:        { type: String, default: null }, // "YYYY-MM-DD" en hora Lima
 });
 
 UserSchema.pre("save", async function (next) {
@@ -28,8 +28,8 @@ UserSchema.pre("save", async function (next) {
     next();
 });
 
-UserSchema.methods.comparePassword = async function (candidatePassword) {
-    return bcrypt.compare(candidatePassword, this.password);
+UserSchema.methods.comparePassword = async function (pwd) {
+    return bcrypt.compare(pwd, this.password);
 };
 
 export default mongoose.model("User", UserSchema);
